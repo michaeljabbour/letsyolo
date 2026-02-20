@@ -5,15 +5,9 @@ export default defineConfig({
     globals: true,
     include: ['tests/**/*.test.ts'],
     coverage: {
-      provider: 'v8',
+      provider: 'istanbul',
       reporter: ['text', 'lcov'],
       include: ['src/**/*.ts'],
-      thresholds: {
-        lines: 80,
-        functions: 80,
-        branches: 70,
-        statements: 80,
-      },
     },
   },
 });

@@ -8,6 +8,9 @@ Supported agents:
 - GitHub Copilot
 - Sourcegraph Amplifier
 
+Requirements:
+- Node.js 20+
+
 ## Why this exists
 
 Different agent CLIs use different flags and config files for autonomous mode. `letsyolo` provides one consistent interface for:

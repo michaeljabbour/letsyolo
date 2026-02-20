@@ -165,7 +165,13 @@ function printYoloResults(results: YoloResult[], action: string): void {
 
     if (!r.config) continue;
 
-    const icon = r.config.enabled ? green('●') : r.config.sessionOnly ? yellow('◐') : dim('○');
+    const icon = r.config.details === 'Not installed'
+      ? dim('○')
+      : r.config.enabled
+        ? green('●')
+        : r.config.sessionOnly
+          ? yellow('◐')
+          : dim('○');
     console.log(`  ${icon} ${bold(r.displayName)}`);
     if (r.config.configPath) {
       console.log(`    ${dim('Config:')}  ${r.config.configPath}`);
