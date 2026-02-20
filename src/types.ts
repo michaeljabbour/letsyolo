@@ -7,8 +7,9 @@ export interface AgentDefinition {
   versionFlag: string;
   installCommand: string;
   yoloFlag: string;
-  configPath: string;
-  configFormat: 'json' | 'toml';
+  configPath?: string;
+  configFormat: 'json' | 'toml' | 'none';
+  persistentToggle: boolean;
 }
 
 export interface AgentStatus {
@@ -28,8 +29,10 @@ export interface DetectionResult {
 export interface YoloConfig {
   /** Whether yolo mode is currently enabled in persistent config */
   enabled: boolean;
-  /** Path to the config file */
-  configPath: string;
+  /** Whether this agent has only session-level yolo support */
+  sessionOnly: boolean;
+  /** Path to the config file, if persistent config exists */
+  configPath?: string;
   /** The CLI flag for per-session yolo */
   cliFlag: string;
   /** Description of what was configured */

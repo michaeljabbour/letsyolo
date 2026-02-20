@@ -9,7 +9,8 @@ type JsonConfig = Record<string, unknown>;
 type TomlConfig = Record<string, unknown>;
 
 function toToml(obj: TomlConfig): string {
-  return stringifyToml(obj as Record<string, any>).trimEnd();  // eslint-disable-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return stringifyToml(obj as any).trimEnd();
 }
 
 function fromToml(text: string): TomlConfig {
@@ -92,6 +93,13 @@ function getOrCreateObject(parent: JsonConfig, key: string): JsonConfig {
 function getTomlString(config: TomlConfig, key: string): string | undefined {
   const value = config[key];
   return typeof value === 'string' ? value : undefined;
+}
+
+function requireConfigPath(configPath: string | undefined, agentName: string): string {
+  if (!configPath) {
+    throw new Error(`${agentName} does not expose a persistent config file`);
+  }
+  return configPath;
 }
 
 // --- Per-agent enable/disable logic ---
@@ -182,13 +190,13 @@ async function disableCopilot(_configPath: string): Promise<string> {
   return 'No persistent yolo toggle to disable. Stop using `copilot --yolo` flag.';
 }
 
-async function enableAmplifier(_configPath: string): Promise<string> {
+async function enableAmplifier(_configPath?: string): Promise<string> {
   // Amplifier uses YAML config (~/.amplifier/settings.yaml) and has no
   // persistent yolo toggle — use `amplifier --dangerously-allow-all` per-session.
   return 'No persistent yolo toggle exists for Amplifier. Use `amplifier --dangerously-allow-all` per-session.';
 }
 
-async function disableAmplifier(_configPath: string): Promise<string> {
+async function disableAmplifier(_configPath?: string): Promise<string> {
   return 'No persistent yolo toggle to disable. Stop using `amplifier --dangerously-allow-all` flag.';
 }
 
@@ -210,15 +218,20 @@ export async function enableYolo(agentType: AgentType): Promise<YoloResult> {
 
   try {
     let details: string;
+    let enabled = false;
+    const sessionOnly = !def.persistentToggle;
+
     switch (agentType) {
       case 'claude-code':
-        details = await enableClaudeCode(def.configPath);
+        details = await enableClaudeCode(requireConfigPath(def.configPath, def.displayName));
+        enabled = true;
         break;
       case 'codex':
-        details = await enableCodex(def.configPath);
+        details = await enableCodex(requireConfigPath(def.configPath, def.displayName));
+        enabled = true;
         break;
       case 'copilot':
-        details = await enableCopilot(def.configPath);
+        details = await enableCopilot(requireConfigPath(def.configPath, def.displayName));
         break;
       case 'amplifier':
         details = await enableAmplifier(def.configPath);
@@ -230,7 +243,8 @@ export async function enableYolo(agentType: AgentType): Promise<YoloResult> {
       displayName: def.displayName,
       success: true,
       config: {
-        enabled: true,
+        enabled,
+        sessionOnly,
         configPath: def.configPath,
         cliFlag: def.yoloFlag,
         details,
@@ -254,15 +268,16 @@ export async function disableYolo(agentType: AgentType): Promise<YoloResult> {
 
   try {
     let details: string;
+    const sessionOnly = !def.persistentToggle;
     switch (agentType) {
       case 'claude-code':
-        details = await disableClaudeCode(def.configPath);
+        details = await disableClaudeCode(requireConfigPath(def.configPath, def.displayName));
         break;
       case 'codex':
-        details = await disableCodex(def.configPath);
+        details = await disableCodex(requireConfigPath(def.configPath, def.displayName));
         break;
       case 'copilot':
-        details = await disableCopilot(def.configPath);
+        details = await disableCopilot(requireConfigPath(def.configPath, def.displayName));
         break;
       case 'amplifier':
         details = await disableAmplifier(def.configPath);
@@ -275,6 +290,7 @@ export async function disableYolo(agentType: AgentType): Promise<YoloResult> {
       success: true,
       config: {
         enabled: false,
+        sessionOnly,
         configPath: def.configPath,
         cliFlag: def.yoloFlag,
         details,
@@ -321,6 +337,7 @@ export async function checkYoloStatus(): Promise<YoloResult[]> {
         success: true,
         config: {
           enabled: false,
+          sessionOnly: !def.persistentToggle,
           configPath: def.configPath,
           cliFlag: def.yoloFlag,
           details: 'Not installed',
@@ -331,17 +348,18 @@ export async function checkYoloStatus(): Promise<YoloResult[]> {
 
     let enabled = false;
     let details = '';
+    const sessionOnly = !def.persistentToggle;
 
     try {
       switch (def.type) {
         case 'claude-code': {
-          const config = await readJsonConfig(def.configPath);
+          const config = await readJsonConfig(requireConfigPath(def.configPath, def.displayName));
           enabled = isClaudeCodeEnabled(config);
           details = enabled ? 'permissions.defaultMode = "bypassPermissions"' : 'Default permissions';
           break;
         }
         case 'codex': {
-          const config = await readTomlConfig(def.configPath);
+          const config = await readTomlConfig(requireConfigPath(def.configPath, def.displayName));
           enabled = isCodexEnabled(config);
           details = enabled ? 'approval_policy = "never", sandbox_mode = "danger-full-access"' : 'Default approval policy';
           break;
@@ -364,6 +382,7 @@ export async function checkYoloStatus(): Promise<YoloResult[]> {
       success: true,
       config: {
         enabled,
+        sessionOnly,
         configPath: def.configPath,
         cliFlag: def.yoloFlag,
         details,

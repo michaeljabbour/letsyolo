@@ -74,6 +74,8 @@ This writes keys to:
 
 and attempts to source that file from common shell profiles (`.zshrc`, `.bashrc`, `.bash_profile`).
 
+During setup/status, letsyolo also scans common dotfiles (`~/.env`, `~/.zshrc`, etc.) to detect existing keys before prompting.
+
 ## Commands
 
 | Command | Description |
@@ -109,8 +111,8 @@ Global options:
 |---|---|---|
 | Claude Code | `~/.claude/settings.json` | `permissions.defaultMode = "bypassPermissions"` |
 | Codex | `~/.codex/config.toml` | `approval_policy = "never"`, `sandbox_mode = "danger-full-access"` |
-| Copilot | N/A | per-session flag only |
-| Amplifier | `~/.config/amp/settings.json` | `permissions.defaultLevel = "allow"` |
+| Copilot | `~/.copilot/config.json` | no persistent global YOLO toggle (session flag only) |
+| Amplifier | N/A | no persistent global YOLO toggle (session flag only) |
 
 ### API keys (`setup`)
 
@@ -119,7 +121,7 @@ Global options:
 | `ANTHROPIC_API_KEY` | Claude Code |
 | `OPENAI_API_KEY` | Codex |
 | `GITHUB_TOKEN` | GitHub Copilot |
-| `SRC_ACCESS_TOKEN` | Amplifier |
+| `AMPLIFIER_CONFIGURED` | Amplifier status probe (keys are self-managed in `~/.amplifier/keys.env`) |
 
 ## Development
 

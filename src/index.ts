@@ -165,9 +165,13 @@ function printYoloResults(results: YoloResult[], action: string): void {
 
     if (!r.config) continue;
 
-    const icon = r.config.enabled ? green('●') : dim('○');
+    const icon = r.config.enabled ? green('●') : r.config.sessionOnly ? yellow('◐') : dim('○');
     console.log(`  ${icon} ${bold(r.displayName)}`);
-    console.log(`    ${dim('Config:')}  ${r.config.configPath}`);
+    if (r.config.configPath) {
+      console.log(`    ${dim('Config:')}  ${r.config.configPath}`);
+    } else {
+      console.log(`    ${dim('Config:')}  n/a (session-only)`);
+    }
     console.log(`    ${dim('CLI:')}     ${cyan(r.config.cliFlag)}`);
     console.log(`    ${dim('Status:')}  ${r.config.details}`);
     console.log();
@@ -183,7 +187,7 @@ function getReadyCommands(results: YoloResult[]): string[] {
   };
 
   return results
-    .filter((result) => result.success && result.config?.enabled)
+    .filter((result) => result.success && result.config && (result.config.enabled || result.config.sessionOnly))
     .map((result) => commands[result.type])
     .filter((command): command is string => Boolean(command));
 }

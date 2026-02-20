@@ -19,14 +19,25 @@ describe('AGENT_DEFINITIONS', () => {
       expect(def.versionFlag).toBeTruthy();
       expect(def.installCommand).toBeTruthy();
       expect(def.yoloFlag).toBeTruthy();
-      expect(def.configPath).toBeTruthy();
-      expect(def.configFormat).toMatch(/^(json|toml)$/);
+      expect(typeof def.persistentToggle).toBe('boolean');
+      if (def.configPath !== undefined) {
+        expect(def.configPath.length).toBeGreaterThan(0);
+      }
+      expect(def.configFormat).toMatch(/^(json|toml|none)$/);
     }
   });
 
   it('codex should use toml config format', () => {
     const codex = AGENT_DEFINITIONS.find((d) => d.type === 'codex');
     expect(codex?.configFormat).toBe('toml');
+  });
+
+  it('should mark copilot and amplifier as session-only', () => {
+    const copilot = AGENT_DEFINITIONS.find((d) => d.type === 'copilot');
+    const amplifier = AGENT_DEFINITIONS.find((d) => d.type === 'amplifier');
+    expect(copilot?.persistentToggle).toBe(false);
+    expect(amplifier?.persistentToggle).toBe(false);
+    expect(amplifier?.configFormat).toBe('none');
   });
 
   it('should have correct yolo flags', () => {

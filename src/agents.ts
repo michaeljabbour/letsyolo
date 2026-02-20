@@ -14,6 +14,7 @@ export const AGENT_DEFINITIONS: AgentDefinition[] = [
     yoloFlag: '--dangerously-skip-permissions',
     configPath: path.join(home, '.claude', 'settings.json'),
     configFormat: 'json',
+    persistentToggle: true,
   },
   {
     type: 'codex',
@@ -24,6 +25,7 @@ export const AGENT_DEFINITIONS: AgentDefinition[] = [
     yoloFlag: '--yolo',
     configPath: path.join(home, '.codex', 'config.toml'),
     configFormat: 'toml',
+    persistentToggle: true,
   },
   {
     type: 'copilot',
@@ -34,6 +36,7 @@ export const AGENT_DEFINITIONS: AgentDefinition[] = [
     yoloFlag: '--yolo',
     configPath: path.join(home, '.copilot', 'config.json'),
     configFormat: 'json',
+    persistentToggle: false,
   },
   {
     type: 'amplifier',
@@ -42,8 +45,8 @@ export const AGENT_DEFINITIONS: AgentDefinition[] = [
     versionFlag: '--version',
     installCommand: 'uv tool install git+https://github.com/microsoft/amplifier',
     yoloFlag: '--dangerously-allow-all',
-    configPath: path.join(home, '.amplifier', 'settings.yaml'),
-    configFormat: 'json', // We handle it as a special case
+    configFormat: 'none',
+    persistentToggle: false,
   },
 ];
 
