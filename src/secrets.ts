@@ -43,25 +43,94 @@ export const API_KEYS: ApiKeyDefinition[] = [
 ];
 
 /**
- * Read existing secrets file into a map.
+ * Common dotfiles and env files where API keys might already live.
+ */
+export function getSearchPaths(): string[] {
+  return [
+    // Our own file first
+    SECRETS_FILE,
+    // Common env files
+    path.join(home, '.env'),
+    path.join(home, '.secrets'),
+    path.join(home, '.secrets.env'),
+    // Shell profiles (people export keys here)
+    path.join(home, '.zshrc'),
+    path.join(home, '.bashrc'),
+    path.join(home, '.bash_profile'),
+    path.join(home, '.profile'),
+    path.join(home, '.zshenv'),
+    // XDG / config locations
+    path.join(home, '.config', '.env'),
+    path.join(home, '.config', 'env'),
+    path.join(home, '.config', 'secrets'),
+  ];
+}
+
+/**
+ * Parse a file for env var assignments.
+ * Handles: export KEY="value", export KEY=value, KEY=value, KEY="value"
+ */
+export function parseEnvLines(content: string): Map<string, string> {
+  const result = new Map<string, string>();
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const match = trimmed.match(/^(?:export\s+)?([A-Z_][A-Z0-9_]*)=["']?([^"'\s#]*)["']?/);
+    if (match && match[2]) {
+      result.set(match[1], match[2]);
+    }
+  }
+  return result;
+}
+
+/**
+ * Read our secrets file into a map.
  */
 export async function readSecrets(): Promise<Map<string, string>> {
-  const secrets = new Map<string, string>();
   try {
     const data = await fs.readFile(SECRETS_FILE, 'utf-8');
-    for (const line of data.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      // Match: export KEY="value" or export KEY=value or KEY=value
-      const match = trimmed.match(/^(?:export\s+)?([A-Z_][A-Z0-9_]*)=["']?([^"']*)["']?$/);
-      if (match) {
-        secrets.set(match[1], match[2]);
-      }
-    }
+    return parseEnvLines(data);
   } catch {
-    // File doesn't exist yet
+    return new Map();
   }
-  return secrets;
+}
+
+/**
+ * Scan common dotfiles for existing API keys.
+ * Returns found keys with where they were found.
+ */
+export async function scanForExistingKeys(): Promise<Map<string, { value: string; source: string }>> {
+  const found = new Map<string, { value: string; source: string }>();
+  const targetVars = new Set(API_KEYS.map((k) => k.envVar));
+  const searchPaths = getSearchPaths();
+
+  // Check current environment first
+  for (const envVar of targetVars) {
+    const val = process.env[envVar];
+    if (val) {
+      found.set(envVar, { value: val, source: 'environment' });
+    }
+  }
+
+  // Scan files — earlier finds don't get overwritten (env takes priority)
+  for (const filePath of searchPaths) {
+    try {
+      const data = await fs.readFile(filePath, 'utf-8');
+      const parsed = parseEnvLines(data);
+      for (const [key, value] of parsed) {
+        if (targetVars.has(key) && !found.has(key)) {
+          const relPath = filePath.startsWith(home)
+            ? '~' + filePath.slice(home.length)
+            : filePath;
+          found.set(key, { value, source: relPath });
+        }
+      }
+    } catch {
+      // File doesn't exist or can't be read — skip
+    }
+  }
+
+  return found;
 }
 
 /**
@@ -99,7 +168,6 @@ export async function writeSecrets(secrets: Map<string, string>): Promise<void> 
  */
 export function getShellProfiles(): string[] {
   if (process.platform === 'win32') {
-    // PowerShell profile
     const psProfile = path.join(home, 'Documents', 'PowerShell', 'Microsoft.PowerShell_profile.ps1');
     const psProfileAlt = path.join(home, 'Documents', 'WindowsPowerShell', 'Microsoft.PowerShell_profile.ps1');
     return [psProfile, psProfileAlt];
@@ -119,7 +187,6 @@ export function getSourceLine(): string {
   if (process.platform === 'win32') {
     return `. "${SECRETS_FILE.replace(/\\/g, '\\\\')}"`;
   }
-  // Use $HOME so it works if the file is shared or copied
   return `[ -f "$HOME/.letsyolo/secrets.env" ] && source "$HOME/.letsyolo/secrets.env"`;
 }
 
@@ -143,7 +210,6 @@ export async function addSourceLine(profilePath: string): Promise<boolean> {
   if (alreadySourced) return false;
 
   try {
-    // Check if file exists
     let content = '';
     try {
       content = await fs.readFile(profilePath, 'utf-8');
@@ -174,10 +240,26 @@ function askQuestion(rl: readline.Interface, prompt: string): Promise<string> {
 }
 
 /**
- * Interactive setup — prompts for each API key.
+ * Mask an API key for display: show first 8 and last 4 chars.
  */
-export async function interactiveSetup(): Promise<{ saved: string[]; skipped: string[] }> {
+export function maskKey(key: string): string {
+  if (key.length <= 12) return '****';
+  return `${key.slice(0, 8)}...${key.slice(-4)}`;
+}
+
+/**
+ * Interactive setup — scans for existing keys, prompts for missing ones.
+ */
+export async function interactiveSetup(): Promise<{ saved: string[]; skipped: string[]; found: string[] }> {
+  const scanned = await scanForExistingKeys();
   const existing = await readSecrets();
+
+  // Merge scanned keys into existing (scanned values are defaults, existing file wins)
+  for (const [key, { value }] of scanned) {
+    if (!existing.has(key)) {
+      existing.set(key, value);
+    }
+  }
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -186,23 +268,52 @@ export async function interactiveSetup(): Promise<{ saved: string[]; skipped: st
 
   const saved: string[] = [];
   const skipped: string[] = [];
+  const found: string[] = [];
 
   try {
     for (const keyDef of API_KEYS) {
-      const current = existing.get(keyDef.envVar) || process.env[keyDef.envVar];
-      const masked = current ? `${current.slice(0, 8)}...${current.slice(-4)}` : '';
-      const currentDisplay = masked ? ` [current: ${masked}]` : '';
+      const currentValue = existing.get(keyDef.envVar);
+      const scanResult = scanned.get(keyDef.envVar);
 
-      const answer = await askQuestion(
-        rl,
-        `  ${keyDef.displayName} (${keyDef.agent})${currentDisplay}\n  ${keyDef.hint}\n  ${keyDef.envVar}= `,
-      );
+      if (currentValue && scanResult) {
+        // Key was found — show where and let user confirm with Enter
+        console.log(`  ${keyDef.displayName} (${keyDef.agent})`);
+        console.log(`    Found: ${maskKey(currentValue)} (from ${scanResult.source})`);
 
-      if (answer) {
-        existing.set(keyDef.envVar, answer);
-        saved.push(keyDef.envVar);
+        const answer = await askQuestion(rl, `    Keep this? [Y/n] `);
+
+        if (answer === '' || answer.toLowerCase().startsWith('y')) {
+          found.push(keyDef.envVar);
+        } else if (answer.toLowerCase() === 'n' || answer.toLowerCase() === 'no') {
+          // Ask for new value
+          const newVal = await askQuestion(rl, `    ${keyDef.envVar}= `);
+          if (newVal) {
+            existing.set(keyDef.envVar, newVal);
+            saved.push(keyDef.envVar);
+          } else {
+            existing.delete(keyDef.envVar);
+            skipped.push(keyDef.envVar);
+          }
+        } else {
+          // Treat any other input as the new key value
+          existing.set(keyDef.envVar, answer);
+          saved.push(keyDef.envVar);
+        }
+        console.log();
       } else {
-        skipped.push(keyDef.envVar);
+        // Key not found — prompt for it
+        const answer = await askQuestion(
+          rl,
+          `  ${keyDef.displayName} (${keyDef.agent})\n  ${keyDef.hint}\n  ${keyDef.envVar}= `,
+        );
+
+        if (answer) {
+          existing.set(keyDef.envVar, answer);
+          saved.push(keyDef.envVar);
+        } else {
+          skipped.push(keyDef.envVar);
+        }
+        console.log();
       }
     }
   } finally {
@@ -210,23 +321,31 @@ export async function interactiveSetup(): Promise<{ saved: string[]; skipped: st
   }
 
   await writeSecrets(existing);
-  return { saved, skipped };
+  return { saved, skipped, found };
 }
 
 /**
- * Check which API keys are currently set (in env or secrets file).
+ * Check which API keys are currently set (env, secrets file, or scanned).
  */
-export async function checkApiKeyStatus(): Promise<{ envVar: string; agent: string; set: boolean; source: 'env' | 'file' | 'none' }[]> {
+export async function checkApiKeyStatus(): Promise<{ envVar: string; agent: string; set: boolean; source: string }[]> {
+  const scanned = await scanForExistingKeys();
   const fileSecrets = await readSecrets();
 
   return API_KEYS.map((keyDef) => {
     const inEnv = !!process.env[keyDef.envVar];
     const inFile = fileSecrets.has(keyDef.envVar);
+    const scanResult = scanned.get(keyDef.envVar);
+
+    let source = 'not set';
+    if (inEnv) source = 'environment';
+    else if (inFile) source = 'secrets file';
+    else if (scanResult) source = scanResult.source;
+
     return {
       envVar: keyDef.envVar,
       agent: keyDef.agent,
-      set: inEnv || inFile,
-      source: inEnv ? 'env' as const : inFile ? 'file' as const : 'none' as const,
+      set: inEnv || inFile || !!scanResult,
+      source,
     };
   });
 }

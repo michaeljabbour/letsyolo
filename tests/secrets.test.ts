@@ -3,16 +3,18 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-// We test the lower-level functions by importing them.
-// interactiveSetup requires stdin so we test it indirectly.
 import {
   readSecrets,
   writeSecrets,
   getShellProfiles,
   getSourceLine,
+  getSearchPaths,
   isSourcedIn,
   addSourceLine,
   checkApiKeyStatus,
+  parseEnvLines,
+  maskKey,
+  scanForExistingKeys,
   API_KEYS,
   SECRETS_FILE,
 } from '../src/secrets.js';
@@ -49,17 +51,133 @@ describe('API_KEYS', () => {
   });
 });
 
-describe('writeSecrets / readSecrets roundtrip', () => {
-  // We can't easily override SECRETS_FILE, so we test the write/read format
-  // by writing to a tmp file and reading back. We'll test the format directly.
+describe('parseEnvLines', () => {
+  it('should parse export KEY="value"', () => {
+    const result = parseEnvLines('export FOO="bar"');
+    expect(result.get('FOO')).toBe('bar');
+  });
 
+  it('should parse export KEY=value (no quotes)', () => {
+    const result = parseEnvLines('export MY_KEY=myvalue');
+    expect(result.get('MY_KEY')).toBe('myvalue');
+  });
+
+  it('should parse KEY=value without export', () => {
+    const result = parseEnvLines('MY_KEY=myvalue');
+    expect(result.get('MY_KEY')).toBe('myvalue');
+  });
+
+  it('should parse single-quoted values', () => {
+    const result = parseEnvLines("export FOO='bar'");
+    expect(result.get('FOO')).toBe('bar');
+  });
+
+  it('should skip comments', () => {
+    const result = parseEnvLines('# comment\nexport KEY="val"\n# another');
+    expect(result.size).toBe(1);
+    expect(result.get('KEY')).toBe('val');
+  });
+
+  it('should skip blank lines', () => {
+    const result = parseEnvLines('\n\nexport A="1"\n\n');
+    expect(result.size).toBe(1);
+  });
+
+  it('should handle multiple keys', () => {
+    const result = parseEnvLines('export A="1"\nexport B="2"\nC=3');
+    expect(result.get('A')).toBe('1');
+    expect(result.get('B')).toBe('2');
+    expect(result.get('C')).toBe('3');
+  });
+
+  it('should ignore lines without valid key format', () => {
+    const result = parseEnvLines('not a key\nalso not = valid\nexport GOOD="yes"');
+    expect(result.size).toBe(1);
+    expect(result.get('GOOD')).toBe('yes');
+  });
+
+  it('should skip empty values', () => {
+    const result = parseEnvLines('export EMPTY=');
+    expect(result.size).toBe(0);
+  });
+});
+
+describe('maskKey', () => {
+  it('should mask long keys', () => {
+    const masked = maskKey('sk-ant-api03-abcdefghijklmnop');
+    expect(masked).toBe('sk-ant-a...mnop');
+  });
+
+  it('should fully mask short keys', () => {
+    const masked = maskKey('short');
+    expect(masked).toBe('****');
+  });
+
+  it('should handle exactly 12 char keys', () => {
+    const masked = maskKey('123456789012');
+    expect(masked).toBe('****');
+  });
+
+  it('should handle 13 char keys', () => {
+    const masked = maskKey('1234567890123');
+    expect(masked).toMatch(/^12345678\.\.\.0123$/);
+  });
+});
+
+describe('getSearchPaths', () => {
+  it('should include our secrets file', () => {
+    const paths = getSearchPaths();
+    expect(paths).toContain(SECRETS_FILE);
+  });
+
+  it('should include common env files', () => {
+    const paths = getSearchPaths();
+    const home = os.homedir();
+    expect(paths).toContain(path.join(home, '.env'));
+    expect(paths).toContain(path.join(home, '.secrets'));
+  });
+
+  it('should include shell profiles', () => {
+    const paths = getSearchPaths();
+    const home = os.homedir();
+    expect(paths).toContain(path.join(home, '.zshrc'));
+    expect(paths).toContain(path.join(home, '.bashrc'));
+  });
+
+  it('should start with our own secrets file', () => {
+    const paths = getSearchPaths();
+    expect(paths[0]).toBe(SECRETS_FILE);
+  });
+});
+
+describe('scanForExistingKeys', () => {
+  it('should find keys from process.env', async () => {
+    // ANTHROPIC_API_KEY is set in the test env
+    const found = await scanForExistingKeys();
+    if (process.env.ANTHROPIC_API_KEY) {
+      const entry = found.get('ANTHROPIC_API_KEY');
+      expect(entry).toBeTruthy();
+      expect(entry!.source).toBe('environment');
+    }
+  });
+
+  it('should return a Map', async () => {
+    const found = await scanForExistingKeys();
+    expect(found).toBeInstanceOf(Map);
+  });
+
+  it('should only look for known API key env vars', async () => {
+    const found = await scanForExistingKeys();
+    const knownVars = new Set(API_KEYS.map((k) => k.envVar));
+    for (const key of found.keys()) {
+      expect(knownVars.has(key)).toBe(true);
+    }
+  });
+});
+
+describe('writeSecrets / readSecrets roundtrip', () => {
   it('should produce export lines', async () => {
     const filePath = path.join(tmpDir, 'secrets.env');
-    const secrets = new Map<string, string>();
-    secrets.set('ANTHROPIC_API_KEY', 'sk-ant-test123');
-    secrets.set('OPENAI_API_KEY', 'sk-test456');
-
-    // Write manually in the expected format
     const lines = [
       '# letsyolo API keys — sourced by your shell profile',
       '# DO NOT commit this file to version control',
@@ -70,58 +188,10 @@ describe('writeSecrets / readSecrets roundtrip', () => {
     ];
     await fs.writeFile(filePath, lines.join('\n'), { mode: 0o600 });
 
-    // Read it back
     const content = await fs.readFile(filePath, 'utf-8');
     expect(content).toContain('export ANTHROPIC_API_KEY="sk-ant-test123"');
     expect(content).toContain('export OPENAI_API_KEY="sk-test456"');
     expect(content).toContain('# DO NOT commit');
-  });
-});
-
-describe('secrets.env parsing', () => {
-  it('should parse export KEY="value" format', async () => {
-    const filePath = path.join(tmpDir, 'test.env');
-    await fs.writeFile(filePath, 'export FOO="bar"\nexport BAZ="qux"\n');
-
-    const content = await fs.readFile(filePath, 'utf-8');
-    const secrets = new Map<string, string>();
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const match = trimmed.match(/^(?:export\s+)?([A-Z_][A-Z0-9_]*)=["']?([^"']*)["']?$/);
-      if (match) {
-        secrets.set(match[1], match[2]);
-      }
-    }
-
-    expect(secrets.get('FOO')).toBe('bar');
-    expect(secrets.get('BAZ')).toBe('qux');
-  });
-
-  it('should parse KEY=value without export', async () => {
-    const filePath = path.join(tmpDir, 'test.env');
-    await fs.writeFile(filePath, 'MY_KEY=myvalue\n');
-
-    const content = await fs.readFile(filePath, 'utf-8');
-    const match = content.trim().match(/^(?:export\s+)?([A-Z_][A-Z0-9_]*)=["']?([^"']*)["']?$/);
-    expect(match).toBeTruthy();
-    expect(match![1]).toBe('MY_KEY');
-    expect(match![2]).toBe('myvalue');
-  });
-
-  it('should skip comments', async () => {
-    const filePath = path.join(tmpDir, 'test.env');
-    await fs.writeFile(filePath, '# comment\nexport KEY="val"\n# another\n');
-
-    const content = await fs.readFile(filePath, 'utf-8');
-    const keys: string[] = [];
-    for (const line of content.split('\n')) {
-      const trimmed = line.trim();
-      if (!trimmed || trimmed.startsWith('#')) continue;
-      const match = trimmed.match(/^(?:export\s+)?([A-Z_][A-Z0-9_]*)=/);
-      if (match) keys.push(match[1]);
-    }
-    expect(keys).toEqual(['KEY']);
   });
 });
 
@@ -239,7 +309,13 @@ describe('checkApiKeyStatus', () => {
       expect(s).toHaveProperty('agent');
       expect(s).toHaveProperty('set');
       expect(s).toHaveProperty('source');
-      expect(['env', 'file', 'none']).toContain(s.source);
+    }
+  });
+
+  it('should report source as string', async () => {
+    const status = await checkApiKeyStatus();
+    for (const s of status) {
+      expect(typeof s.source).toBe('string');
     }
   });
 });

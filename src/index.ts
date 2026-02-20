@@ -91,9 +91,7 @@ async function printApiKeyStatus(): Promise<void> {
   console.log(`\n${BOLD}API Keys${RESET}\n`);
   for (const k of keys) {
     const icon = k.set ? `${GREEN}✓${RESET}` : `${RED}✗${RESET}`;
-    const sourceLabel = k.source === 'env' ? `${DIM}(in env)${RESET}`
-      : k.source === 'file' ? `${DIM}(in secrets file)${RESET}`
-      : `${DIM}(not set)${RESET}`;
+    const sourceLabel = k.set ? `${DIM}(${k.source})${RESET}` : `${DIM}(not set)${RESET}`;
     console.log(`  ${icon} ${k.envVar.padEnd(24)} ${k.agent.padEnd(18)} ${sourceLabel}`);
   }
   console.log(`\n  ${DIM}Secrets file: ${SECRETS_FILE}${RESET}`);
@@ -101,13 +99,19 @@ async function printApiKeyStatus(): Promise<void> {
 }
 
 async function runSetup(): Promise<void> {
-  console.log(`\n${BOLD}API Key Setup${RESET}\n`);
-  console.log(`  Enter your API keys below. Press Enter to skip any key.\n`);
+  console.log(`\n${BOLD}API Key Setup${RESET}`);
+  console.log(`\n  Scanning for existing keys...\n`);
 
-  const { saved, skipped } = await interactiveSetup();
+  const { saved, skipped, found } = await interactiveSetup();
 
-  if (saved.length > 0) {
-    console.log(`\n  ${GREEN}✓${RESET} Saved ${saved.length} key(s) to ${DIM}${SECRETS_FILE}${RESET}`);
+  const totalConfigured = saved.length + found.length;
+
+  if (found.length > 0) {
+    console.log(`  ${GREEN}✓${RESET} Kept ${found.length} existing key(s)`);
+  }
+
+  if (totalConfigured > 0) {
+    console.log(`  ${GREEN}✓${RESET} Saved ${totalConfigured} key(s) to ${DIM}${SECRETS_FILE}${RESET}`);
     console.log(`  ${DIM}(file permissions: 600 — owner read/write only)${RESET}`);
 
     // Try to add source line to shell profiles
