@@ -1,4 +1,4 @@
-.PHONY: install test lint build clean help setup enable disable status detect keys flags link uninstall
+.PHONY: install test lint build check clean help setup enable disable status detect keys flags link uninstall
 
 # Find node/npm — handle nvm lazy-loading which breaks in non-interactive shells
 NODE_BIN := $(shell command -v node 2>/dev/null || echo "$(HOME)/.nvm/versions/node/$(shell ls $(HOME)/.nvm/versions/node 2>/dev/null | grep '^v' | sort -V | tail -1)/bin/node")
@@ -9,8 +9,8 @@ RUN      = @$(NPX_BIN) tsx src/index.ts
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-install: ## Install dependencies
-	@$(NPM_BIN) install
+install: ## Install dependencies from lockfile
+	@$(NPM_BIN) ci
 
 test: install ## Run tests
 	@$(NPX_BIN) vitest run
@@ -20,6 +20,9 @@ lint: install ## Type-check with TypeScript
 
 build: install ## Compile TypeScript to dist/
 	@$(NPX_BIN) tsc
+
+check: install ## Run lint, tests, and build checks
+	@$(NPM_BIN) run check
 
 # --- User commands ---
 
@@ -53,4 +56,4 @@ uninstall: ## Remove global link
 	@$(NPM_BIN) unlink -g letsyolo 2>/dev/null || true
 
 clean: ## Remove build artifacts and node_modules
-	@rm -rf dist node_modules
+	@rm -rf dist node_modules coverage

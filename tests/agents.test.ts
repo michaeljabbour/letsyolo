@@ -16,7 +16,6 @@ describe('AGENT_DEFINITIONS', () => {
       expect(def.type).toBeTruthy();
       expect(def.displayName).toBeTruthy();
       expect(def.binaries.length).toBeGreaterThan(0);
-      expect(def.npmPackage).toBeTruthy();
       expect(def.versionFlag).toBeTruthy();
       expect(def.installCommand).toBeTruthy();
       expect(def.yoloFlag).toBeTruthy();

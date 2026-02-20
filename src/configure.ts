@@ -1,100 +1,115 @@
 import fs from 'node:fs/promises';
-import path from 'node:path';
+import { parse as parseToml, stringify as stringifyToml } from '@iarna/toml';
 import { AGENT_DEFINITIONS, getDefinitionOrThrow } from './agents.js';
 import { detectBinary } from './detect.js';
+import { isFileNotFoundError, writeFileAtomic } from './fs-utils.js';
 import type { AgentType, YoloResult } from './types.js';
 
-/**
- * Minimal TOML writer — handles flat key = "value" pairs.
- * Good enough for codex config.toml which is flat.
- */
-function toToml(obj: Record<string, string | boolean | number>): string {
-  return Object.entries(obj)
-    .map(([key, value]) => {
-      if (typeof value === 'string') return `${key} = "${value}"`;
-      return `${key} = ${value}`;
-    })
-    .join('\n');
+type JsonConfig = Record<string, unknown>;
+type TomlConfig = Record<string, unknown>;
+
+function toToml(obj: TomlConfig): string {
+  return stringifyToml(obj as Record<string, any>).trimEnd();  // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
-/**
- * Minimal TOML reader — handles flat key = "value" / key = value.
- */
-function fromToml(text: string): Record<string, string> {
-  const result: Record<string, string> = {};
-  for (const line of text.split('\n')) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('[')) continue;
-    const eqIndex = trimmed.indexOf('=');
-    if (eqIndex === -1) continue;
-    const key = trimmed.slice(0, eqIndex).trim();
-    let value = trimmed.slice(eqIndex + 1).trim();
-    // Strip quotes
-    if ((value.startsWith('"') && value.endsWith('"')) ||
-        (value.startsWith("'") && value.endsWith("'"))) {
-      value = value.slice(1, -1);
-    }
-    result[key] = value;
+function fromToml(text: string): TomlConfig {
+  const parsed = parseToml(text);
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return {};
   }
-  return result;
+  return parsed as TomlConfig;
 }
 
 /**
  * Read a JSON config file, returning {} if it doesn't exist.
  */
-async function readJsonConfig(filePath: string): Promise<Record<string, unknown>> {
+async function readJsonConfig(filePath: string): Promise<JsonConfig> {
   try {
     const data = await fs.readFile(filePath, 'utf-8');
-    return JSON.parse(data);
-  } catch {
-    return {};
+    const parsed = JSON.parse(data);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error(`Expected a JSON object in ${filePath}`);
+    }
+    return parsed as JsonConfig;
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return {};
+    }
+
+    if (error instanceof SyntaxError) {
+      throw new Error(`Invalid JSON in ${filePath}: ${error.message}`);
+    }
+
+    throw error;
   }
 }
 
 /**
  * Write a JSON config file, creating parent dirs as needed.
  */
-async function writeJsonConfig(filePath: string, config: Record<string, unknown>): Promise<void> {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, JSON.stringify(config, null, 2) + '\n');
+async function writeJsonConfig(filePath: string, config: JsonConfig): Promise<void> {
+  await writeFileAtomic(filePath, JSON.stringify(config, null, 2) + '\n');
 }
 
 /**
  * Read a TOML config file, returning {} if it doesn't exist.
  */
-async function readTomlConfig(filePath: string): Promise<Record<string, string>> {
+async function readTomlConfig(filePath: string): Promise<TomlConfig> {
   try {
     const data = await fs.readFile(filePath, 'utf-8');
     return fromToml(data);
-  } catch {
-    return {};
+  } catch (error) {
+    if (isFileNotFoundError(error)) {
+      return {};
+    }
+
+    if (error instanceof Error) {
+      throw new Error(`Invalid TOML in ${filePath}: ${error.message}`);
+    }
+
+    throw error;
   }
 }
 
 /**
  * Write a TOML config file, creating parent dirs as needed.
  */
-async function writeTomlConfig(filePath: string, config: Record<string, string>): Promise<void> {
-  await fs.mkdir(path.dirname(filePath), { recursive: true });
-  await fs.writeFile(filePath, toToml(config) + '\n');
+async function writeTomlConfig(filePath: string, config: TomlConfig): Promise<void> {
+  await writeFileAtomic(filePath, toToml(config) + '\n');
+}
+
+function getOrCreateObject(parent: JsonConfig, key: string): JsonConfig {
+  const value = parent[key];
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as JsonConfig;
+  }
+
+  const next: JsonConfig = {};
+  parent[key] = next;
+  return next;
+}
+
+function getTomlString(config: TomlConfig, key: string): string | undefined {
+  const value = config[key];
+  return typeof value === 'string' ? value : undefined;
 }
 
 // --- Per-agent enable/disable logic ---
 
 async function enableClaudeCode(configPath: string): Promise<string> {
   const config = await readJsonConfig(configPath);
-  if (!config.permissions || typeof config.permissions !== 'object') {
-    config.permissions = {};
-  }
-  (config.permissions as Record<string, unknown>).defaultMode = 'bypassPermissions';
+  const permissions = getOrCreateObject(config, 'permissions');
+  permissions.defaultMode = 'bypassPermissions';
   await writeJsonConfig(configPath, config);
   return 'Set permissions.defaultMode = "bypassPermissions"';
 }
 
 async function disableClaudeCode(configPath: string): Promise<string> {
   const config = await readJsonConfig(configPath);
-  if (config.permissions && typeof config.permissions === 'object') {
-    const perms = config.permissions as Record<string, unknown>;
+  const permissions = config.permissions;
+
+  if (permissions && typeof permissions === 'object' && !Array.isArray(permissions)) {
+    const perms = permissions as JsonConfig;
     if (perms.defaultMode === 'bypassPermissions') {
       delete perms.defaultMode;
       if (Object.keys(perms).length === 0) {
@@ -104,12 +119,14 @@ async function disableClaudeCode(configPath: string): Promise<string> {
       return 'Removed permissions.defaultMode';
     }
   }
+
   return 'Already disabled (no bypassPermissions found)';
 }
 
-function isClaudeCodeEnabled(config: Record<string, unknown>): boolean {
-  if (config.permissions && typeof config.permissions === 'object') {
-    return (config.permissions as Record<string, unknown>).defaultMode === 'bypassPermissions';
+function isClaudeCodeEnabled(config: JsonConfig): boolean {
+  const permissions = config.permissions;
+  if (permissions && typeof permissions === 'object' && !Array.isArray(permissions)) {
+    return (permissions as JsonConfig).defaultMode === 'bypassPermissions';
   }
   return false;
 }
@@ -125,28 +142,34 @@ async function enableCodex(configPath: string): Promise<string> {
 async function disableCodex(configPath: string): Promise<string> {
   const config = await readTomlConfig(configPath);
   let changed = false;
-  if (config.approval_policy === 'never') {
+
+  if (getTomlString(config, 'approval_policy') === 'never') {
     delete config.approval_policy;
     changed = true;
   }
-  if (config.sandbox_mode === 'danger-full-access') {
+
+  if (getTomlString(config, 'sandbox_mode') === 'danger-full-access') {
     delete config.sandbox_mode;
     changed = true;
   }
+
   if (changed) {
     await writeTomlConfig(configPath, config);
     return 'Removed approval_policy and sandbox_mode overrides';
   }
+
   return 'Already disabled (no yolo settings found)';
 }
 
-function isCodexEnabled(config: Record<string, string>): boolean {
-  return config.approval_policy === 'never' && config.sandbox_mode === 'danger-full-access';
+function isCodexEnabled(config: TomlConfig): boolean {
+  return (
+    getTomlString(config, 'approval_policy') === 'never' &&
+    getTomlString(config, 'sandbox_mode') === 'danger-full-access'
+  );
 }
 
 async function enableCopilot(configPath: string): Promise<string> {
-  // Copilot has no persistent yolo toggle — only CLI flags
-  // We can set trusted_folders as the closest thing
+  // Copilot has no persistent yolo toggle — only CLI flags.
   const config = await readJsonConfig(configPath);
   if (!Array.isArray(config.trusted_folders)) {
     config.trusted_folders = [];
@@ -160,20 +183,19 @@ async function disableCopilot(_configPath: string): Promise<string> {
 }
 
 async function enableAmplifier(configPath: string): Promise<string> {
-  // Amp settings can set default permission levels
   const config = await readJsonConfig(configPath);
-  if (!config.permissions || typeof config.permissions !== 'object') {
-    config.permissions = {};
-  }
-  (config.permissions as Record<string, unknown>).defaultLevel = 'allow';
+  const permissions = getOrCreateObject(config, 'permissions');
+  permissions.defaultLevel = 'allow';
   await writeJsonConfig(configPath, config);
   return 'Set permissions.defaultLevel = "allow"';
 }
 
 async function disableAmplifier(configPath: string): Promise<string> {
   const config = await readJsonConfig(configPath);
-  if (config.permissions && typeof config.permissions === 'object') {
-    const perms = config.permissions as Record<string, unknown>;
+  const permissions = config.permissions;
+
+  if (permissions && typeof permissions === 'object' && !Array.isArray(permissions)) {
+    const perms = permissions as JsonConfig;
     if (perms.defaultLevel === 'allow') {
       delete perms.defaultLevel;
       if (Object.keys(perms).length === 0) {
@@ -183,12 +205,14 @@ async function disableAmplifier(configPath: string): Promise<string> {
       return 'Removed permissions.defaultLevel';
     }
   }
+
   return 'Already disabled (no allow-all settings found)';
 }
 
-function isAmplifierEnabled(config: Record<string, unknown>): boolean {
-  if (config.permissions && typeof config.permissions === 'object') {
-    return (config.permissions as Record<string, unknown>).defaultLevel === 'allow';
+function isAmplifierEnabled(config: JsonConfig): boolean {
+  const permissions = config.permissions;
+  if (permissions && typeof permissions === 'object' && !Array.isArray(permissions)) {
+    return (permissions as JsonConfig).defaultLevel === 'allow';
   }
   return false;
 }
@@ -357,8 +381,9 @@ export async function checkYoloStatus(): Promise<YoloResult[]> {
           break;
         }
       }
-    } catch {
-      details = 'Could not read config';
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      details = `Could not read config (${reason})`;
     }
 
     results.push({

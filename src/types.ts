@@ -4,7 +4,6 @@ export interface AgentDefinition {
   type: AgentType;
   displayName: string;
   binaries: string[];
-  npmPackage: string;
   versionFlag: string;
   installCommand: string;
   yoloFlag: string;

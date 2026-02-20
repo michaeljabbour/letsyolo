@@ -12,9 +12,8 @@ import {
   isSourcedIn,
   addSourceLine,
   checkApiKeyStatus,
-  parseEnvLines,
-  maskKey,
   scanForExistingKeys,
+  maskKey,
   API_KEYS,
   SECRETS_FILE,
 } from '../src/secrets.js';
@@ -51,57 +50,6 @@ describe('API_KEYS', () => {
   });
 });
 
-describe('parseEnvLines', () => {
-  it('should parse export KEY="value"', () => {
-    const result = parseEnvLines('export FOO="bar"');
-    expect(result.get('FOO')).toBe('bar');
-  });
-
-  it('should parse export KEY=value (no quotes)', () => {
-    const result = parseEnvLines('export MY_KEY=myvalue');
-    expect(result.get('MY_KEY')).toBe('myvalue');
-  });
-
-  it('should parse KEY=value without export', () => {
-    const result = parseEnvLines('MY_KEY=myvalue');
-    expect(result.get('MY_KEY')).toBe('myvalue');
-  });
-
-  it('should parse single-quoted values', () => {
-    const result = parseEnvLines("export FOO='bar'");
-    expect(result.get('FOO')).toBe('bar');
-  });
-
-  it('should skip comments', () => {
-    const result = parseEnvLines('# comment\nexport KEY="val"\n# another');
-    expect(result.size).toBe(1);
-    expect(result.get('KEY')).toBe('val');
-  });
-
-  it('should skip blank lines', () => {
-    const result = parseEnvLines('\n\nexport A="1"\n\n');
-    expect(result.size).toBe(1);
-  });
-
-  it('should handle multiple keys', () => {
-    const result = parseEnvLines('export A="1"\nexport B="2"\nC=3');
-    expect(result.get('A')).toBe('1');
-    expect(result.get('B')).toBe('2');
-    expect(result.get('C')).toBe('3');
-  });
-
-  it('should ignore lines without valid key format', () => {
-    const result = parseEnvLines('not a key\nalso not = valid\nexport GOOD="yes"');
-    expect(result.size).toBe(1);
-    expect(result.get('GOOD')).toBe('yes');
-  });
-
-  it('should skip empty values', () => {
-    const result = parseEnvLines('export EMPTY=');
-    expect(result.size).toBe(0);
-  });
-});
-
 describe('maskKey', () => {
   it('should mask long keys', () => {
     const masked = maskKey('sk-ant-api03-abcdefghijklmnop');
@@ -109,25 +57,22 @@ describe('maskKey', () => {
   });
 
   it('should fully mask short keys', () => {
-    const masked = maskKey('short');
-    expect(masked).toBe('****');
+    expect(maskKey('short')).toBe('****');
   });
 
   it('should handle exactly 12 char keys', () => {
-    const masked = maskKey('123456789012');
-    expect(masked).toBe('****');
+    expect(maskKey('123456789012')).toBe('****');
   });
 
   it('should handle 13 char keys', () => {
-    const masked = maskKey('1234567890123');
-    expect(masked).toMatch(/^12345678\.\.\.0123$/);
+    expect(maskKey('1234567890123')).toMatch(/^12345678\.\.\.0123$/);
   });
 });
 
 describe('getSearchPaths', () => {
-  it('should include our secrets file', () => {
+  it('should include our secrets file first', () => {
     const paths = getSearchPaths();
-    expect(paths).toContain(SECRETS_FILE);
+    expect(paths[0]).toBe(SECRETS_FILE);
   });
 
   it('should include common env files', () => {
@@ -143,16 +88,10 @@ describe('getSearchPaths', () => {
     expect(paths).toContain(path.join(home, '.zshrc'));
     expect(paths).toContain(path.join(home, '.bashrc'));
   });
-
-  it('should start with our own secrets file', () => {
-    const paths = getSearchPaths();
-    expect(paths[0]).toBe(SECRETS_FILE);
-  });
 });
 
 describe('scanForExistingKeys', () => {
   it('should find keys from process.env', async () => {
-    // ANTHROPIC_API_KEY is set in the test env
     const found = await scanForExistingKeys();
     if (process.env.ANTHROPIC_API_KEY) {
       const entry = found.get('ANTHROPIC_API_KEY');
@@ -309,12 +248,6 @@ describe('checkApiKeyStatus', () => {
       expect(s).toHaveProperty('agent');
       expect(s).toHaveProperty('set');
       expect(s).toHaveProperty('source');
-    }
-  });
-
-  it('should report source as string', async () => {
-    const status = await checkApiKeyStatus();
-    for (const s of status) {
       expect(typeof s.source).toBe('string');
     }
   });

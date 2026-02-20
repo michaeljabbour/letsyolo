@@ -1,162 +1,284 @@
 #!/usr/bin/env node
 
-import { detectAll } from './detect.js';
-import { enableAll, enableYolo, disableAll, disableYolo, checkYoloStatus } from './configure.js';
-import { parseAgentType, AGENT_DEFINITIONS } from './agents.js';
+import { createRequire } from 'node:module';
+import { AGENT_DEFINITIONS, parseAgentType } from './agents.js';
 import {
-  interactiveSetup,
-  checkApiKeyStatus,
-  addSourceLine,
-  getShellProfiles,
-  getSourceLine,
-  isSourcedIn,
+  checkYoloStatus,
+  disableAll,
+  disableYolo,
+  enableAll,
+  enableYolo,
+} from './configure.js';
+import { detectAll } from './detect.js';
+import {
   SECRETS_FILE,
+  addSourceLine,
+  checkApiKeyStatus,
+  getShellProfiles,
+  interactiveSetup,
+  isSourcedIn,
 } from './secrets.js';
 import type { AgentStatus, YoloResult } from './types.js';
 
-// --- Formatting ---
+const require = createRequire(import.meta.url);
+const packageJson = require('../package.json') as { version?: string };
+const VERSION = packageJson.version ?? '0.0.0';
 
-const BOLD = '\x1b[1m';
-const DIM = '\x1b[2m';
-const RESET = '\x1b[0m';
-const GREEN = '\x1b[32m';
-const RED = '\x1b[31m';
-const YELLOW = '\x1b[33m';
-const CYAN = '\x1b[36m';
+const ANSI = {
+  bold: '\x1b[1m',
+  dim: '\x1b[2m',
+  green: '\x1b[32m',
+  red: '\x1b[31m',
+  yellow: '\x1b[33m',
+  cyan: '\x1b[36m',
+  reset: '\x1b[0m',
+} as const;
+
+let colorEnabled = true;
+
+interface CliOptions {
+  json: boolean;
+  noColor: boolean;
+  help: boolean;
+  version: boolean;
+  positionals: string[];
+}
+
+interface SetupResult {
+  saved: string[];
+  skipped: string[];
+  shellProfilesConfigured: string[];
+}
+
+function style(code: string, value: string): string {
+  if (!colorEnabled) return value;
+  return `${code}${value}${ANSI.reset}`;
+}
+
+function bold(value: string): string {
+  return style(ANSI.bold, value);
+}
+
+function dim(value: string): string {
+  return style(ANSI.dim, value);
+}
+
+function green(value: string): string {
+  return style(ANSI.green, value);
+}
+
+function red(value: string): string {
+  return style(ANSI.red, value);
+}
+
+function yellow(value: string): string {
+  return style(ANSI.yellow, value);
+}
+
+function cyan(value: string): string {
+  return style(ANSI.cyan, value);
+}
 
 function statusIcon(ok: boolean): string {
-  return ok ? `${GREEN}✓${RESET}` : `${RED}✗${RESET}`;
+  return ok ? green('✓') : red('✗');
+}
+
+function parseCliOptions(rawArgs: string[]): CliOptions {
+  const options: CliOptions = {
+    json: false,
+    noColor: false,
+    help: false,
+    version: false,
+    positionals: [],
+  };
+
+  for (const arg of rawArgs) {
+    if (arg === '--json') {
+      options.json = true;
+      continue;
+    }
+
+    if (arg === '--no-color') {
+      options.noColor = true;
+      continue;
+    }
+
+    if (arg === '--help' || arg === '-h') {
+      options.help = true;
+      continue;
+    }
+
+    if (arg === '--version' || arg === '-v') {
+      options.version = true;
+      continue;
+    }
+
+    if (arg.startsWith('-')) {
+      throw new Error(`Unknown option: ${arg}`);
+    }
+
+    options.positionals.push(arg);
+  }
+
+  return options;
+}
+
+function configureColors(options: CliOptions): void {
+  const noColorEnv = Object.prototype.hasOwnProperty.call(process.env, 'NO_COLOR');
+  const forceColor = (process.env.FORCE_COLOR ?? '') !== '' && process.env.FORCE_COLOR !== '0';
+
+  colorEnabled =
+    !options.json &&
+    !options.noColor &&
+    !noColorEnv &&
+    (forceColor || Boolean(process.stdout.isTTY));
+}
+
+function printJson(value: unknown): void {
+  process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);
 }
 
 function printDetection(agents: AgentStatus[]): void {
-  console.log(`\n${BOLD}Detected Agents${RESET}\n`);
+  console.log(`\n${bold('Detected Agents')}\n`);
   console.log(`  ${'Agent'.padEnd(20)} ${'Status'.padEnd(12)} ${'Version'.padEnd(16)} Path`);
   console.log(`  ${'─'.repeat(20)} ${'─'.repeat(12)} ${'─'.repeat(16)} ${'─'.repeat(30)}`);
 
   for (const agent of agents) {
-    const status = agent.installed
-      ? `${GREEN}installed${RESET}`
-      : `${RED}missing${RESET}`;
+    const status = agent.installed ? green('installed') : red('missing');
     const version = agent.version ?? '—';
     const agentPath = agent.path ?? '—';
-    console.log(`  ${statusIcon(agent.installed)} ${agent.displayName.padEnd(18)} ${status.padEnd(21)} ${version.padEnd(16)} ${DIM}${agentPath}${RESET}`);
+    console.log(
+      `  ${statusIcon(agent.installed)} ${agent.displayName.padEnd(18)} ${status.padEnd(21)} ${version.padEnd(16)} ${dim(agentPath)}`,
+    );
   }
   console.log();
 }
 
 function printYoloResults(results: YoloResult[], action: string): void {
-  console.log(`\n${BOLD}YOLO Mode — ${action}${RESET}\n`);
+  console.log(`\n${bold(`YOLO Mode — ${action}`)}\n`);
 
   for (const r of results) {
     if (!r.success) {
-      console.log(`  ${RED}✗${RESET} ${r.displayName}: ${RED}${r.error}${RESET}`);
+      console.log(`  ${red('✗')} ${r.displayName}: ${red(r.error ?? 'Unknown error')}`);
       continue;
     }
+
     if (!r.config) continue;
 
-    const icon = r.config.enabled ? `${GREEN}●${RESET}` : `${DIM}○${RESET}`;
-    console.log(`  ${icon} ${BOLD}${r.displayName}${RESET}`);
-    console.log(`    ${DIM}Config:${RESET}  ${r.config.configPath}`);
-    console.log(`    ${DIM}CLI:${RESET}     ${CYAN}${r.config.cliFlag}${RESET}`);
-    console.log(`    ${DIM}Status:${RESET}  ${r.config.details}`);
+    const icon = r.config.enabled ? green('●') : dim('○');
+    console.log(`  ${icon} ${bold(r.displayName)}`);
+    console.log(`    ${dim('Config:')}  ${r.config.configPath}`);
+    console.log(`    ${dim('CLI:')}     ${cyan(r.config.cliFlag)}`);
+    console.log(`    ${dim('Status:')}  ${r.config.details}`);
     console.log();
   }
 }
 
-function printReadyToRun(results: YoloResult[]): void {
-  const enabled = results.filter((r) => r.success && r.config?.enabled);
-  if (enabled.length === 0) return;
-
-  console.log(`${BOLD}Ready to go! Run any of these:${RESET}\n`);
-
+function getReadyCommands(results: YoloResult[]): string[] {
   const commands: Record<string, string> = {
     'claude-code': 'claude --dangerously-skip-permissions',
-    'codex': 'codex --yolo',
-    'copilot': 'copilot --yolo',
-    'amplifier': 'amp --dangerously-allow-all',
+    codex: 'codex --yolo',
+    copilot: 'copilot --yolo',
+    amplifier: 'amp --dangerously-allow-all',
   };
 
-  for (const r of enabled) {
-    const cmd = commands[r.type];
-    if (cmd) {
-      console.log(`  ${CYAN}${cmd}${RESET}`);
-    }
+  return results
+    .filter((result) => result.success && result.config?.enabled)
+    .map((result) => commands[result.type])
+    .filter((command): command is string => Boolean(command));
+}
+
+function printReadyToRun(results: YoloResult[]): void {
+  const commands = getReadyCommands(results);
+  if (commands.length === 0) return;
+
+  console.log(`${bold('Ready to go! Run any of these:')}\n`);
+
+  for (const command of commands) {
+    console.log(`  ${cyan(command)}`);
   }
+
   console.log();
 }
 
 async function printApiKeyStatus(): Promise<void> {
   const keys = await checkApiKeyStatus();
 
-  console.log(`\n${BOLD}API Keys${RESET}\n`);
+  console.log(`\n${bold('API Keys')}\n`);
   for (const k of keys) {
-    const icon = k.set ? `${GREEN}✓${RESET}` : `${RED}✗${RESET}`;
-    const sourceLabel = k.set ? `${DIM}(${k.source})${RESET}` : `${DIM}(not set)${RESET}`;
+    const icon = k.set ? green('✓') : red('✗');
+    const sourceLabel = k.set ? dim(`(${k.source})`) : dim('(not set)');
+
     console.log(`  ${icon} ${k.envVar.padEnd(24)} ${k.agent.padEnd(18)} ${sourceLabel}`);
   }
-  console.log(`\n  ${DIM}Secrets file: ${SECRETS_FILE}${RESET}`);
+
+  console.log(`\n  ${dim(`Secrets file: ${SECRETS_FILE}`)}`);
   console.log();
 }
 
-async function runSetup(): Promise<void> {
-  console.log(`\n${BOLD}API Key Setup${RESET}`);
-  console.log(`\n  Scanning for existing keys...\n`);
-
-  const { saved, skipped, found } = await interactiveSetup();
-
-  const totalConfigured = saved.length + found.length;
-
-  if (found.length > 0) {
-    console.log(`  ${GREEN}✓${RESET} Kept ${found.length} existing key(s)`);
+async function runSetup(jsonMode: boolean): Promise<SetupResult> {
+  if (!jsonMode) {
+    console.log(`\n${bold('API Key Setup')}\n`);
+    console.log('  Enter your API keys below. Press Enter to skip any key.\n');
   }
 
-  if (totalConfigured > 0) {
-    console.log(`  ${GREEN}✓${RESET} Saved ${totalConfigured} key(s) to ${DIM}${SECRETS_FILE}${RESET}`);
-    console.log(`  ${DIM}(file permissions: 600 — owner read/write only)${RESET}`);
+  const { saved, skipped } = await interactiveSetup();
+  const profiles = getShellProfiles();
+  const hooked: string[] = [];
 
-    // Try to add source line to shell profiles
-    const profiles = getShellProfiles();
-    const hooked: string[] = [];
-
-    for (const profile of profiles) {
+  for (const profile of profiles) {
+    try {
       const added = await addSourceLine(profile);
-      if (added) {
+      if (added || (await isSourcedIn(profile))) {
         hooked.push(profile);
-      } else {
-        const alreadyThere = await isSourcedIn(profile);
-        if (alreadyThere) {
-          hooked.push(profile);
+      }
+    } catch {
+      // Keep setup moving even if one shell profile is unreadable.
+    }
+  }
+
+  if (!jsonMode) {
+    if (saved.length > 0) {
+      console.log(`\n  ${green('✓')} Saved ${saved.length} key(s) to ${dim(SECRETS_FILE)}`);
+      console.log(`  ${dim('(file permissions: 600 — owner read/write only)')}`);
+
+      if (hooked.length > 0) {
+        console.log(`\n  ${green('✓')} Shell profile(s) configured:`);
+        for (const profile of hooked) {
+          console.log(`    ${dim(profile)}`);
         }
       }
+
+      console.log(`\n${bold('Activate now — run this in your terminal:')}\n`);
+      console.log(`  ${cyan(`source ${SECRETS_FILE}`)}\n`);
+      console.log(dim('Or open a new terminal tab — it will load automatically.'));
     }
 
-    if (hooked.length > 0) {
-      console.log(`\n  ${GREEN}✓${RESET} Shell profile(s) configured:`);
-      for (const p of hooked) {
-        console.log(`    ${DIM}${p}${RESET}`);
-      }
+    if (skipped.length > 0) {
+      console.log(`\n  ${dim(`Skipped: ${skipped.join(', ')}`)}`);
     }
 
-    // Tell them exactly what to do next
-    console.log(`\n${BOLD}Activate now — run this in your terminal:${RESET}\n`);
-    console.log(`  ${CYAN}source ${SECRETS_FILE}${RESET}\n`);
-
-    console.log(`${DIM}Or open a new terminal tab — it will load automatically.${RESET}`);
+    console.log();
   }
 
-  if (skipped.length > 0) {
-    console.log(`\n  ${DIM}Skipped: ${skipped.join(', ')}${RESET}`);
-  }
-
-  console.log();
+  return {
+    saved,
+    skipped,
+    shellProfilesConfigured: hooked,
+  };
 }
 
 function printHelp(): void {
-  console.log(`
-${BOLD}letsyolo${RESET} — Configure YOLO mode for AI coding agents
+  const agentNames = AGENT_DEFINITIONS.map((agent) => agent.type).join(', ');
 
-${BOLD}Usage:${RESET}
-  letsyolo                     Detect agents & show current YOLO status
+  console.log(`
+${bold('letsyolo')} — Configure YOLO mode for AI coding agents
+
+${bold('Usage:')}
+  letsyolo [command] [agent] [--json] [--no-color]
+
+${bold('Commands:')}
+  letsyolo                     Detect agents and show current YOLO status
   letsyolo enable              Enable YOLO mode for all detected agents
   letsyolo enable <agent>      Enable YOLO mode for a specific agent
   letsyolo disable             Disable YOLO mode for all agents
@@ -165,64 +287,89 @@ ${BOLD}Usage:${RESET}
   letsyolo status              Show current YOLO configuration status
   letsyolo setup               Interactive API key setup
   letsyolo keys                Show API key status
-  letsyolo flags               Show recommended CLI flags for each agent
+  letsyolo flags               Show recommended CLI flags
 
-${BOLD}Agents:${RESET}
+${bold('Agents:')}
   claude, claude-code          Claude Code CLI
   codex                        OpenAI Codex CLI
   copilot, github-copilot      GitHub Copilot CLI
   amp, amplifier               Sourcegraph Amplifier
 
-${BOLD}Examples:${RESET}
-  letsyolo setup               ${DIM}# Set up API keys (interactive)${RESET}
-  letsyolo enable              ${DIM}# Enable yolo for everything${RESET}
-  letsyolo enable claude       ${DIM}# Just Claude Code${RESET}
-  letsyolo disable codex       ${DIM}# Disable yolo for Codex${RESET}
-  letsyolo flags               ${DIM}# Show CLI flags cheat sheet${RESET}
+${bold('Global Options:')}
+  --json                       Emit machine-readable JSON output
+  --no-color                   Disable ANSI colors
+  --help, -h                   Show help
+  --version, -v                Show version
+
+${bold('Known Agent Types:')} ${agentNames}
 `);
 }
 
 function printFlags(): void {
   console.log(`
-${BOLD}Recommended CLI Flags (per-session)${RESET}
+${bold('Recommended CLI Flags (per-session)')}
 
-  ${CYAN}claude --dangerously-skip-permissions${RESET}
-  ${CYAN}codex --yolo${RESET}
-  ${CYAN}copilot --yolo${RESET}
-  ${CYAN}amp --dangerously-allow-all${RESET}
+  ${cyan('claude --dangerously-skip-permissions')}
+  ${cyan('codex --yolo')}
+  ${cyan('copilot --yolo')}
+  ${cyan('amp --dangerously-allow-all')}
 
-${BOLD}Full Autonomous Launch Commands${RESET}
+${bold('Full Autonomous Launch Commands')}
 
-  ${CYAN}claude --dangerously-skip-permissions -p "your prompt"${RESET}
-  ${CYAN}codex --sandbox danger-full-access --ask-for-approval never${RESET}
-  ${CYAN}copilot --autopilot --yolo --no-ask-user${RESET}
-  ${CYAN}amp --dangerously-allow-all -x "your prompt"${RESET}
+  ${cyan('claude --dangerously-skip-permissions -p "your prompt"')}
+  ${cyan('codex --sandbox danger-full-access --ask-for-approval never')}
+  ${cyan('copilot --autopilot --yolo --no-ask-user')}
+  ${cyan('amp --dangerously-allow-all -x "your prompt"')}
 
-${YELLOW}⚠  All bypass modes are for trusted/sandboxed environments only.${RESET}
+${yellow('⚠  All bypass modes are for trusted/sandboxed environments only.')}
 `);
 }
 
-// --- Main ---
-
 async function main(): Promise<void> {
-  const args = process.argv.slice(2);
-  const command = args[0]?.toLowerCase();
-  const target = args[1];
+  const options = parseCliOptions(process.argv.slice(2));
+  configureColors(options);
+
+  if (options.version) {
+    console.log(VERSION);
+    return;
+  }
+
+  if (options.help) {
+    printHelp();
+    return;
+  }
+
+  const [rawCommand, target, extra] = options.positionals;
+  if (extra) {
+    throw new Error(`Unexpected argument: ${extra}`);
+  }
+
+  const command = rawCommand?.toLowerCase();
 
   switch (command) {
     case undefined:
     case 'status': {
       const detection = await detectAll();
-      printDetection(detection.agents);
       const status = await checkYoloStatus();
-      printYoloResults(status, 'Current Status');
-      await printApiKeyStatus();
+      const keys = await checkApiKeyStatus();
+
+      if (options.json) {
+        printJson({ detection, yolo: status, keys });
+      } else {
+        printDetection(detection.agents);
+        printYoloResults(status, 'Current Status');
+        await printApiKeyStatus();
+      }
       break;
     }
 
     case 'detect': {
       const detection = await detectAll();
-      printDetection(detection.agents);
+      if (options.json) {
+        printJson(detection);
+      } else {
+        printDetection(detection.agents);
+      }
       break;
     }
 
@@ -230,16 +377,24 @@ async function main(): Promise<void> {
       if (target) {
         const agentType = parseAgentType(target);
         if (!agentType) {
-          console.error(`${RED}Unknown agent: ${target}${RESET}. Run ${CYAN}letsyolo --help${RESET} for options.`);
-          process.exit(1);
+          throw new Error(`Unknown agent: ${target}`);
         }
+
         const result = await enableYolo(agentType);
-        printYoloResults([result], 'Enable');
-        printReadyToRun([result]);
+        if (options.json) {
+          printJson({ results: [result], readyCommands: getReadyCommands([result]) });
+        } else {
+          printYoloResults([result], 'Enable');
+          printReadyToRun([result]);
+        }
       } else {
         const results = await enableAll();
-        printYoloResults(results, 'Enable All');
-        printReadyToRun(results);
+        if (options.json) {
+          printJson({ results, readyCommands: getReadyCommands(results) });
+        } else {
+          printYoloResults(results, 'Enable All');
+          printReadyToRun(results);
+        }
       }
       break;
     }
@@ -248,49 +403,79 @@ async function main(): Promise<void> {
       if (target) {
         const agentType = parseAgentType(target);
         if (!agentType) {
-          console.error(`${RED}Unknown agent: ${target}${RESET}. Run ${CYAN}letsyolo --help${RESET} for options.`);
-          process.exit(1);
+          throw new Error(`Unknown agent: ${target}`);
         }
+
         const result = await disableYolo(agentType);
-        printYoloResults([result], 'Disable');
+        if (options.json) {
+          printJson({ results: [result] });
+        } else {
+          printYoloResults([result], 'Disable');
+        }
       } else {
         const results = await disableAll();
-        printYoloResults(results, 'Disable All');
+        if (options.json) {
+          printJson({ results });
+        } else {
+          printYoloResults(results, 'Disable All');
+        }
       }
       break;
     }
 
     case 'setup': {
-      await runSetup();
+      const setupResult = await runSetup(options.json);
+      if (options.json) {
+        printJson(setupResult);
+      }
       break;
     }
 
     case 'keys': {
-      await printApiKeyStatus();
+      const keys = await checkApiKeyStatus();
+      if (options.json) {
+        printJson({ keys });
+      } else {
+        await printApiKeyStatus();
+      }
       break;
     }
 
     case 'flags': {
-      printFlags();
-      break;
-    }
-
-    case '--help':
-    case '-h':
-    case 'help': {
-      printHelp();
+      if (options.json) {
+        printJson({
+          flags: {
+            claude: 'claude --dangerously-skip-permissions',
+            codex: 'codex --yolo',
+            copilot: 'copilot --yolo',
+            amplifier: 'amp --dangerously-allow-all',
+          },
+          warning: 'All bypass modes are for trusted/sandboxed environments only.',
+        });
+      } else {
+        printFlags();
+      }
       break;
     }
 
     default: {
-      console.error(`${RED}Unknown command: ${command}${RESET}`);
-      printHelp();
-      process.exit(1);
+      throw new Error(`Unknown command: ${command}`);
     }
   }
 }
 
-main().catch((err) => {
-  console.error(`${RED}Fatal error:${RESET}`, err);
+main().catch((error) => {
+  const message = error instanceof Error ? error.message : String(error);
+  try {
+    const options = parseCliOptions(process.argv.slice(2));
+    if (options.json) {
+      printJson({ error: message });
+    } else {
+      console.error(`${red('Error:')} ${message}`);
+      console.error(`Run ${cyan('letsyolo --help')} for usage.`);
+    }
+  } catch {
+    console.error(`${red('Error:')} ${message}`);
+  }
   process.exit(1);
 });

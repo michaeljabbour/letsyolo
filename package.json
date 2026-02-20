@@ -1,17 +1,57 @@
 {
   "name": "letsyolo",
   "version": "1.0.0",
-  "description": "Detect and configure YOLO/autonomous mode for AI coding agents",
+  "description": "Detect and configure YOLO/autonomous mode for AI coding agent CLIs",
+  "license": "MIT",
   "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
   "bin": {
     "letsyolo": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.18.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/michaeljabbour/letsyolo.git"
+  },
+  "bugs": {
+    "url": "https://github.com/michaeljabbour/letsyolo/issues"
+  },
+  "homepage": "https://github.com/michaeljabbour/letsyolo#readme",
+  "keywords": [
+    "cli",
+    "ai",
+    "codex",
+    "claude",
+    "copilot",
+    "amplifier"
+  ],
   "scripts": {
-    "build": "tsc",
+    "clean": "rm -rf dist",
+    "build": "npm run clean && tsc",
     "dev": "tsx src/index.ts",
+    "lint": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "tsc --noEmit"
+    "test:coverage": "vitest run --coverage",
+    "check": "npm run lint && npm run test && npm run build",
+    "prepublishOnly": "npm run check"
+  },
+  "dependencies": {
+    "@iarna/toml": "^2.2.5"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

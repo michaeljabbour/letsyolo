@@ -15,15 +15,15 @@ const execFileAsync = promisify(execFile);
  */
 export async function getCandidatePaths(binaryName: string): Promise<string[]> {
   const home = os.homedir();
-  const candidates: string[] = [binaryName];
+  const candidates = new Set<string>([binaryName]);
 
   if (process.platform !== 'win32') {
-    candidates.push(
+    [
       `/usr/local/bin/${binaryName}`,
       `/opt/homebrew/bin/${binaryName}`,
       `/usr/bin/${binaryName}`,
       path.join(home, '.local', 'bin', binaryName),
-    );
+    ].forEach((candidate) => candidates.add(candidate));
 
     // nvm-managed node versions (filter to v* directories only)
     const nvmDir = path.join(home, '.nvm', 'versions', 'node');
@@ -31,14 +31,14 @@ export async function getCandidatePaths(binaryName: string): Promise<string[]> {
       const entries = await readdir(nvmDir);
       for (const entry of entries) {
         if (!entry.startsWith('v')) continue;
-        candidates.push(path.join(nvmDir, entry, 'bin', binaryName));
+        candidates.add(path.join(nvmDir, entry, 'bin', binaryName));
       }
     } catch {
       // nvm not installed — skip
     }
   }
 
-  return candidates;
+  return [...candidates];
 }
 
 /**
@@ -53,11 +53,12 @@ export async function detectBinary(
     const candidates = await getCandidatePaths(binary);
     for (const cmd of candidates) {
       try {
-        const { stdout } = await execFileAsync(cmd, [versionFlag], {
+        const { stdout, stderr } = await execFileAsync(cmd, [versionFlag], {
           timeout: 5000,
           encoding: 'utf8',
         });
-        const version = (stdout || '').trim().split('\n')[0] || null;
+        const output = `${stdout || ''}\n${stderr || ''}`.trim();
+        const version = output.split('\n')[0]?.trim() || null;
 
         let resolvedPath = cmd;
         if (!path.isAbsolute(cmd)) {
