@@ -36,10 +36,10 @@ export const API_KEYS: ApiKeyDefinition[] = [
     hint: 'https://github.com/settings/tokens (or use `gh auth login`)',
   },
   {
-    envVar: 'SRC_ACCESS_TOKEN',
-    displayName: 'Sourcegraph Access Token',
+    envVar: 'AMPLIFIER_CONFIGURED',
+    displayName: 'Amplifier Provider Keys',
     agent: 'Amplifier',
-    hint: 'https://sourcegraph.com/user/settings/tokens',
+    hint: 'Managed by Amplifier in ~/.amplifier/keys.env (run `amplifier init` or `amplifier provider use`)',
   },
 ];
 
@@ -156,6 +156,7 @@ export async function writeSecrets(secrets: Map<string, string>): Promise<void> 
   ];
 
   for (const keyDef of API_KEYS) {
+    if (keyDef.envVar === 'AMPLIFIER_CONFIGURED') continue; // Virtual — not a real env var
     const value = secrets.get(keyDef.envVar);
     if (value) {
       lines.push(`export ${keyDef.envVar}=${quoteEnvValue(value)}`);
@@ -269,6 +270,20 @@ export async function interactiveSetup(): Promise<{ saved: string[]; skipped: st
 
   try {
     for (const keyDef of API_KEYS) {
+      // Amplifier manages its own keys — skip interactive prompt
+      if (keyDef.envVar === 'AMPLIFIER_CONFIGURED') {
+        const amp = await checkAmplifierKeys();
+        if (amp.configured) {
+          console.log(`  ${keyDef.displayName} (${keyDef.agent})`);
+          console.log(`    Self-managed in ${amp.source} — skipping\n`);
+        } else {
+          console.log(`  ${keyDef.displayName} (${keyDef.agent})`);
+          console.log(`    Not configured. Run: amplifier init\n`);
+          skipped.push(keyDef.envVar);
+        }
+        continue;
+      }
+
       const current = existing.get(keyDef.envVar) || process.env[keyDef.envVar];
       const masked = current ? `${current.slice(0, 8)}...${current.slice(-4)}` : '';
       const currentDisplay = masked ? ` [current: ${masked}]` : '';
@@ -310,7 +325,30 @@ export function getSearchPaths(): string[] {
     path.join(home, '.config', '.env'),
     path.join(home, '.config', 'env'),
     path.join(home, '.config', 'secrets'),
+    // Agent-specific key files
+    path.join(home, '.amplifier', 'keys.env'),
   ];
+}
+
+/**
+ * Check if Amplifier has its own keys configured in ~/.amplifier/keys.env.
+ * Amplifier manages its own provider keys — we just detect whether it's set up.
+ */
+async function checkAmplifierKeys(): Promise<{ configured: boolean; source: string }> {
+  const keysFile = path.join(home, '.amplifier', 'keys.env');
+  try {
+    const data = await fs.readFile(keysFile, 'utf-8');
+    // Check if it has at least one actual key (not just comments/blanks)
+    const hasKeys = data.split('\n').some((line) => {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith('#')) return false;
+      const parsed = parseEnvLine(trimmed);
+      return parsed && parsed.value.length > 0;
+    });
+    return { configured: hasKeys, source: '~/.amplifier/keys.env' };
+  } catch {
+    return { configured: false, source: '' };
+  }
 }
 
 /**
@@ -324,6 +362,7 @@ export async function scanForExistingKeys(): Promise<Map<string, { value: string
 
   // Check current environment first
   for (const envVar of targetVars) {
+    if (envVar === 'AMPLIFIER_CONFIGURED') continue; // Not a real env var
     const val = process.env[envVar];
     if (val) {
       found.set(envVar, { value: val, source: 'environment' });
@@ -347,6 +386,14 @@ export async function scanForExistingKeys(): Promise<Map<string, { value: string
       }
     } catch {
       // File doesn't exist or can't be read — skip
+    }
+  }
+
+  // Check Amplifier's self-managed keys
+  if (!found.has('AMPLIFIER_CONFIGURED')) {
+    const amp = await checkAmplifierKeys();
+    if (amp.configured) {
+      found.set('AMPLIFIER_CONFIGURED', { value: 'configured', source: amp.source });
     }
   }
 

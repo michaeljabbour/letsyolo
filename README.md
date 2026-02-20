@@ -1,146 +1,163 @@
 # letsyolo
 
-Detect and configure YOLO / autonomous mode for AI coding agent CLIs.
+CLI utility to detect AI coding-agent CLIs and configure their persistent "YOLO"/autonomous settings.
 
-Supports **Claude Code**, **Codex**, **GitHub Copilot**, and **Amplifier (Amp)**.
+Supported agents:
+- Claude Code
+- Codex
+- GitHub Copilot
+- Sourcegraph Amplifier
 
-## Quick Start
+## Why this exists
+
+Different agent CLIs use different flags and config files for autonomous mode. `letsyolo` provides one consistent interface for:
+- detecting installed agent CLIs
+- enabling/disabling persistent bypass settings where supported
+- setting up required API keys in one secure secrets file
+- exposing a machine-readable mode (`--json`) for automation
+
+## Install
+
+### Local development
 
 ```bash
 git clone https://github.com/michaeljabbour/letsyolo.git
 cd letsyolo
-make install
-make status
+npm ci
+npm run build
 ```
 
-## Setup API Keys
+### Global CLI install
 
 ```bash
-make setup
+npm install -g letsyolo
 ```
 
-This will:
-1. Prompt you for each API key (skip any with Enter)
-2. Save them to `~/.letsyolo/secrets.env` (mode 600)
-3. Add a source line to your `.zshrc` / `.bashrc`
-4. Tell you exactly what to run next
-
-After setup, activate immediately:
+Or from source:
 
 ```bash
-source ~/.letsyolo/secrets.env
+make link
 ```
 
-Or just open a new terminal — it loads automatically.
+## Usage
 
-## Enable YOLO Mode
+### Human-readable output
 
 ```bash
-make enable                # enable for all agents
-make enable AGENT=claude   # just Claude Code
-make enable AGENT=codex    # just Codex
+letsyolo status
+letsyolo enable
+letsyolo enable codex
+letsyolo disable claude
+letsyolo keys
+letsyolo flags
 ```
 
-After enabling, you'll see the ready-to-run commands:
+### Machine-readable output
 
+```bash
+letsyolo status --json
+letsyolo detect --json
+letsyolo enable codex --json
 ```
-Ready to go! Run any of these:
 
-  claude --dangerously-skip-permissions
-  codex --yolo
-  copilot --yolo
-  amp --dangerously-allow-all
+### API key setup
+
+```bash
+letsyolo setup
 ```
+
+This writes keys to:
+
+```text
+~/.letsyolo/secrets.env
+```
+
+and attempts to source that file from common shell profiles (`.zshrc`, `.bashrc`, `.bash_profile`).
 
 ## Commands
 
-```bash
-make setup       # Set up API keys (interactive)
-make enable      # Enable YOLO mode for all agents
-make disable     # Disable YOLO mode for all agents
-make status      # Show agents + yolo config + API keys
-make detect      # Show installed agents
-make keys        # Show API key status
-make flags       # CLI flags cheat sheet
-make test        # Run tests
-make help        # Show all targets
-```
+| Command | Description |
+|---|---|
+| `letsyolo` / `letsyolo status` | Detect agents + show YOLO + key status |
+| `letsyolo detect` | Show detected agents |
+| `letsyolo enable [agent]` | Enable YOLO mode for one/all agents |
+| `letsyolo disable [agent]` | Disable YOLO mode for one/all agents |
+| `letsyolo setup` | Interactive API key setup |
+| `letsyolo keys` | Show API key status |
+| `letsyolo flags` | Show recommended per-session CLI flags |
+| `letsyolo --version` | Print CLI version |
+| `letsyolo --help` | Print help |
 
-Target a specific agent with `AGENT=`:
+Global options:
+- `--json`: output JSON
+- `--no-color`: disable ANSI colors
 
-```bash
-make enable AGENT=claude
-make disable AGENT=codex
-```
-
-## Install Globally
-
-```bash
-make link      # npm link — adds `letsyolo` to your PATH
-letsyolo       # now works from anywhere
-```
-
-## Agent Aliases
+## Agent aliases
 
 | Input | Agent |
-|-------|-------|
-| `claude`, `claude-code` | Claude Code |
-| `codex` | OpenAI Codex |
+|---|---|
+| `claude`, `claude-code`, `claudecode` | Claude Code |
+| `codex` | Codex |
 | `copilot`, `github-copilot` | GitHub Copilot |
 | `amp`, `amplifier` | Sourcegraph Amplifier |
 
-## What It Configures
+## Configuration details
 
-### Persistent Config (via `make enable`)
+### Persistent config (`enable`/`disable`)
 
-| Agent | Config File | Setting |
-|-------|-------------|---------|
+| Agent | Config file | Setting |
+|---|---|---|
 | Claude Code | `~/.claude/settings.json` | `permissions.defaultMode = "bypassPermissions"` |
 | Codex | `~/.codex/config.toml` | `approval_policy = "never"`, `sandbox_mode = "danger-full-access"` |
-| Copilot | — | No persistent toggle (use `copilot --yolo`) |
+| Copilot | N/A | per-session flag only |
 | Amplifier | `~/.config/amp/settings.json` | `permissions.defaultLevel = "allow"` |
 
-### API Keys (via `make setup`)
+### API keys (`setup`)
 
-| Env Var | Agent | Where to get it |
-|---------|-------|-----------------|
-| `ANTHROPIC_API_KEY` | Claude Code | https://console.anthropic.com/settings/keys |
-| `OPENAI_API_KEY` | Codex | https://platform.openai.com/api-keys |
-| `GITHUB_TOKEN` | GitHub Copilot | https://github.com/settings/tokens |
-| `SRC_ACCESS_TOKEN` | Amplifier | https://sourcegraph.com/user/settings/tokens |
+| Env var | Agent |
+|---|---|
+| `ANTHROPIC_API_KEY` | Claude Code |
+| `OPENAI_API_KEY` | Codex |
+| `GITHUB_TOKEN` | GitHub Copilot |
+| `SRC_ACCESS_TOKEN` | Amplifier |
 
-Keys are stored in `~/.letsyolo/secrets.env` and auto-sourced by your shell.
-
-### Per-Session CLI Flags
+## Development
 
 ```bash
-claude --dangerously-skip-permissions
-codex --yolo
-copilot --yolo
-amp --dangerously-allow-all
+npm ci
+npm run lint
+npm run test
+npm run build
+npm run check
 ```
 
-## Tests
+`make` wrappers:
 
 ```bash
-make test      # 63 tests across 4 test files
-make lint      # TypeScript type-check
+make help
+make setup
+make enable AGENT=codex
+make status
+make check
 ```
 
-## Requirements
+## CI
 
-- Node.js 18+
-- make (preinstalled on macOS/Linux)
+GitHub Actions (`.github/workflows/ci.yml`) runs on push/PR with:
+- Node 20 and 22
+- lint (`tsc --noEmit`)
+- tests (`vitest run`)
+- build (`tsc`)
+- package validation (`npm pack --dry-run`)
 
-## Security
+## Security notes
 
-All bypass modes are for **trusted/sandboxed environments only**.
+Autonomous/bypass modes are unsafe in untrusted environments.
 
-- Use isolated worktrees, containers, or VMs
-- Prefer allowlists over blanket bypass where possible
-- API keys are stored with `600` permissions (owner read/write only)
-- The secrets file is gitignored by default
+Use only in isolated worktrees, containers, or VMs when possible.
+
+`~/.letsyolo/secrets.env` is written with `0600` permissions.
 
 ## License
 
-MIT
+MIT (`LICENSE`)

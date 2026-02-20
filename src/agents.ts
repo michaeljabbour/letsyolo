@@ -42,8 +42,8 @@ export const AGENT_DEFINITIONS: AgentDefinition[] = [
     versionFlag: '--version',
     installCommand: 'Install Amplifier CLI (https://ampcode.com/docs)',
     yoloFlag: '--dangerously-allow-all',
-    configPath: path.join(home, '.config', 'amp', 'settings.json'),
-    configFormat: 'json',
+    configPath: path.join(home, '.amplifier', 'settings.yaml'),
+    configFormat: 'json', // We handle it as a special case
   },
 ];
 

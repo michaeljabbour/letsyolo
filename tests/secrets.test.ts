@@ -43,9 +43,9 @@ describe('API_KEYS', () => {
     expect(new Set(vars).size).toBe(vars.length);
   });
 
-  it('should include hints with URLs', () => {
+  it('should include hints', () => {
     for (const key of API_KEYS) {
-      expect(key.hint).toMatch(/https?:\/\//);
+      expect(key.hint.length).toBeGreaterThan(0);
     }
   });
 });
