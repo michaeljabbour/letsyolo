@@ -182,39 +182,14 @@ async function disableCopilot(_configPath: string): Promise<string> {
   return 'No persistent yolo toggle to disable. Stop using `copilot --yolo` flag.';
 }
 
-async function enableAmplifier(configPath: string): Promise<string> {
-  const config = await readJsonConfig(configPath);
-  const permissions = getOrCreateObject(config, 'permissions');
-  permissions.defaultLevel = 'allow';
-  await writeJsonConfig(configPath, config);
-  return 'Set permissions.defaultLevel = "allow"';
+async function enableAmplifier(_configPath: string): Promise<string> {
+  // Amplifier uses YAML config (~/.amplifier/settings.yaml) and has no
+  // persistent yolo toggle — use `amplifier --dangerously-allow-all` per-session.
+  return 'No persistent yolo toggle exists for Amplifier. Use `amplifier --dangerously-allow-all` per-session.';
 }
 
-async function disableAmplifier(configPath: string): Promise<string> {
-  const config = await readJsonConfig(configPath);
-  const permissions = config.permissions;
-
-  if (permissions && typeof permissions === 'object' && !Array.isArray(permissions)) {
-    const perms = permissions as JsonConfig;
-    if (perms.defaultLevel === 'allow') {
-      delete perms.defaultLevel;
-      if (Object.keys(perms).length === 0) {
-        delete config.permissions;
-      }
-      await writeJsonConfig(configPath, config);
-      return 'Removed permissions.defaultLevel';
-    }
-  }
-
-  return 'Already disabled (no allow-all settings found)';
-}
-
-function isAmplifierEnabled(config: JsonConfig): boolean {
-  const permissions = config.permissions;
-  if (permissions && typeof permissions === 'object' && !Array.isArray(permissions)) {
-    return (permissions as JsonConfig).defaultLevel === 'allow';
-  }
-  return false;
+async function disableAmplifier(_configPath: string): Promise<string> {
+  return 'No persistent yolo toggle to disable. Stop using `amplifier --dangerously-allow-all` flag.';
 }
 
 /**
@@ -374,12 +349,9 @@ export async function checkYoloStatus(): Promise<YoloResult[]> {
         case 'copilot':
           details = 'No persistent yolo toggle (use --yolo flag)';
           break;
-        case 'amplifier': {
-          const config = await readJsonConfig(def.configPath);
-          enabled = isAmplifierEnabled(config);
-          details = enabled ? 'permissions.defaultLevel = "allow"' : 'Default permissions';
+        case 'amplifier':
+          details = 'No persistent yolo toggle (use --dangerously-allow-all flag)';
           break;
-        }
       }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error);

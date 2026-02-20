@@ -36,13 +36,16 @@ disable: install ## Disable YOLO mode (all agents, or AGENT=claude)
 	$(RUN) disable $(AGENT)
 
 status: install ## Show full status (agents + yolo + API keys)
-	$(RUN) status
+	$(RUN) status $(FLAGS)
 
 detect: install ## Detect installed agents
-	$(RUN) detect
+	$(RUN) detect $(FLAGS)
 
 keys: install ## Show API key status
-	$(RUN) keys
+	$(RUN) keys $(FLAGS)
+
+json: install ## Show full status as JSON
+	$(RUN) status --json
 
 flags: install ## Show CLI flags cheat sheet
 	$(RUN) flags
