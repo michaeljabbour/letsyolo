@@ -1,0 +1,22 @@
+{
+  "name": "letsyolo",
+  "version": "1.0.0",
+  "description": "Detect and configure YOLO/autonomous mode for AI coding agents",
+  "type": "module",
+  "bin": {
+    "letsyolo": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
