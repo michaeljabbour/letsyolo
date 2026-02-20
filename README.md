@@ -10,13 +10,13 @@ Supports **Claude Code**, **Codex**, **GitHub Copilot**, and **Amplifier (Amp)**
 git clone https://github.com/michaeljabbour/letsyolo.git
 cd letsyolo
 make install
-make run
+make status
 ```
 
 ## Setup API Keys
 
 ```bash
-make run ARGS="setup"
+make setup
 ```
 
 This will:
@@ -36,9 +36,9 @@ Or just open a new terminal — it loads automatically.
 ## Enable YOLO Mode
 
 ```bash
-make run ARGS="enable"          # enable for all agents
-make run ARGS="enable claude"   # just Claude Code
-make run ARGS="enable codex"    # just Codex
+make enable                # enable for all agents
+make enable AGENT=claude   # just Claude Code
+make enable AGENT=codex    # just Codex
 ```
 
 After enabling, you'll see the ready-to-run commands:
@@ -52,26 +52,25 @@ Ready to go! Run any of these:
   amp --dangerously-allow-all
 ```
 
-## All Commands
-
-| Command | Description |
-|---------|-------------|
-| `letsyolo` | Detect agents, show yolo status + API key status |
-| `letsyolo setup` | Interactive API key setup |
-| `letsyolo keys` | Show which API keys are configured |
-| `letsyolo enable [agent]` | Enable persistent yolo config |
-| `letsyolo disable [agent]` | Disable persistent yolo config |
-| `letsyolo detect` | Show installed agents |
-| `letsyolo status` | Full status overview |
-| `letsyolo flags` | CLI flags cheat sheet |
-
-Pass commands via make:
+## Commands
 
 ```bash
-make run ARGS="setup"
-make run ARGS="enable"
-make run ARGS="keys"
-make run ARGS="flags"
+make setup       # Set up API keys (interactive)
+make enable      # Enable YOLO mode for all agents
+make disable     # Disable YOLO mode for all agents
+make status      # Show agents + yolo config + API keys
+make detect      # Show installed agents
+make keys        # Show API key status
+make flags       # CLI flags cheat sheet
+make test        # Run tests
+make help        # Show all targets
+```
+
+Target a specific agent with `AGENT=`:
+
+```bash
+make enable AGENT=claude
+make disable AGENT=codex
 ```
 
 ## Install Globally
@@ -92,7 +91,7 @@ letsyolo       # now works from anywhere
 
 ## What It Configures
 
-### Persistent Config (via `enable`)
+### Persistent Config (via `make enable`)
 
 | Agent | Config File | Setting |
 |-------|-------------|---------|
@@ -101,7 +100,7 @@ letsyolo       # now works from anywhere
 | Copilot | — | No persistent toggle (use `copilot --yolo`) |
 | Amplifier | `~/.config/amp/settings.json` | `permissions.defaultLevel = "allow"` |
 
-### API Keys (via `setup`)
+### API Keys (via `make setup`)
 
 | Env Var | Agent | Where to get it |
 |---------|-------|-----------------|
@@ -124,7 +123,7 @@ amp --dangerously-allow-all
 ## Tests
 
 ```bash
-make test      # 55+ tests across 4 test files
+make test      # 63 tests across 4 test files
 make lint      # TypeScript type-check
 ```
 
