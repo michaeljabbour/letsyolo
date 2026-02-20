@@ -280,11 +280,22 @@ Notes:
 - `--yolo` / `--allow-all` are session flags, not a persistent config toggle.
 - `trusted_folders` and other preferences persist in Copilot config.
 
+### Installation
+
+```bash
+npm install -g @github/copilot
+# or: brew install github/copilot/copilot
+# or via gh: gh copilot
+```
+
+Requires an active GitHub Copilot subscription. Auth is prompted on first launch.
+
 ### Sources
 
-- [GitHub Copilot CLI Docs](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli)
-- [Configure Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/configure-copilot-cli)
-- [Copilot CLI Changelog](https://github.com/github/copilot-cli/blob/main/changelog.md)
+- [Installing Copilot CLI](https://docs.github.com/en/copilot/how-tos/set-up/install-copilot-cli)
+- [Using Copilot CLI](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/use-copilot-cli)
+- [About Copilot CLI](https://docs.github.com/en/copilot/concepts/agents/about-copilot-cli)
+- [gh copilot integration](https://cli.github.com/manual/gh_copilot)
 - `copilot --help`
 
 ---

@@ -30,7 +30,7 @@ export const AGENT_DEFINITIONS: AgentDefinition[] = [
     displayName: 'GitHub Copilot',
     binaries: ['copilot'],
     versionFlag: '--version',
-    installCommand: 'Install GitHub Copilot CLI (https://docs.github.com/en/copilot)',
+    installCommand: 'npm install -g @github/copilot',
     yoloFlag: '--yolo',
     configPath: path.join(home, '.copilot', 'config.json'),
     configFormat: 'json',
