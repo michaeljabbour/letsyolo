@@ -40,7 +40,7 @@ export const AGENT_DEFINITIONS: AgentDefinition[] = [
     displayName: 'Amplifier',
     binaries: ['amplifier', 'amp'],
     versionFlag: '--version',
-    installCommand: 'Install Amplifier CLI (https://ampcode.com/docs)',
+    installCommand: 'uv tool install git+https://github.com/microsoft/amplifier',
     yoloFlag: '--dangerously-allow-all',
     configPath: path.join(home, '.amplifier', 'settings.yaml'),
     configFormat: 'json', // We handle it as a special case
