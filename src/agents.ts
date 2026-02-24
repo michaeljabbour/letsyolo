@@ -41,10 +41,10 @@ export const AGENT_DEFINITIONS: AgentDefinition[] = [
   {
     type: 'amplifier',
     displayName: 'Amplifier',
-    binaries: ['amplifier', 'amp'],
+    binaries: ['amplifier'],
     versionFlag: '--version',
     installCommand: 'uv tool install git+https://github.com/microsoft/amplifier',
-    yoloFlag: '--dangerously-allow-all',
+    yoloFlag: 'amplifier',
     configFormat: 'none',
     persistentToggle: false,
   },
@@ -69,7 +69,6 @@ export function parseAgentType(input: string): AgentType | undefined {
     'codex': 'codex',
     'copilot': 'copilot',
     'github-copilot': 'copilot',
-    'amp': 'amplifier',
     'amplifier': 'amplifier',
   };
   return aliases[normalized];

@@ -6,7 +6,7 @@ Supported agents:
 - Claude Code
 - Codex
 - GitHub Copilot
-- Sourcegraph Amplifier
+- Amplifier (Microsoft)
 
 Requirements:
 - Node.js 20+
@@ -21,25 +21,26 @@ Different agent CLIs use different flags and config files for autonomous mode. `
 
 ## Install
 
-### Local development
+### From source (local development)
 
 ```bash
 git clone https://github.com/michaeljabbour/letsyolo.git
 cd letsyolo
 npm ci
 npm run build
+npm link        # installs the letsyolo binary globally from your local build
 ```
 
-### Global CLI install
+Or using make:
+
+```bash
+make link       # runs build + npm link
+```
+
+### From npm registry (once published)
 
 ```bash
 npm install -g letsyolo
-```
-
-Or from source:
-
-```bash
-make link
 ```
 
 ## Usage
@@ -104,7 +105,7 @@ Global options:
 | `claude`, `claude-code`, `claudecode` | Claude Code |
 | `codex` | Codex |
 | `copilot`, `github-copilot` | GitHub Copilot |
-| `amp`, `amplifier` | Sourcegraph Amplifier |
+| `amplifier` | Amplifier (Microsoft) |
 
 ## Configuration details
 

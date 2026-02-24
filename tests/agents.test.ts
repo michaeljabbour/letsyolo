@@ -45,7 +45,7 @@ describe('AGENT_DEFINITIONS', () => {
     expect(flags['claude-code']).toBe('--dangerously-skip-permissions');
     expect(flags['codex']).toBe('--yolo');
     expect(flags['copilot']).toBe('--yolo');
-    expect(flags['amplifier']).toBe('--dangerously-allow-all');
+    expect(flags['amplifier']).toBe('amplifier');
   });
 });
 
@@ -90,10 +90,9 @@ describe('parseAgentType', () => {
     expect(parseAgentType('github-copilot')).toBe('copilot');
   });
 
-  it('should parse amplifier aliases', () => {
-    expect(parseAgentType('amp')).toBe('amplifier');
+  it('should parse amplifier', () => {
     expect(parseAgentType('amplifier')).toBe('amplifier');
-    expect(parseAgentType('AMP')).toBe('amplifier');
+    expect(parseAgentType('AMPLIFIER')).toBe('amplifier');
   });
 
   it('should return undefined for unknown inputs', () => {

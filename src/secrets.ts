@@ -39,7 +39,7 @@ export const API_KEYS: ApiKeyDefinition[] = [
     envVar: 'AMPLIFIER_CONFIGURED',
     displayName: 'Amplifier Provider Keys',
     agent: 'Amplifier',
-    hint: 'Managed by Amplifier in ~/.amplifier/keys.env (run `amplifier init` or `amplifier provider use`)',
+    hint: 'Managed by Amplifier — run `amplifier init` to configure providers',
   },
 ];
 

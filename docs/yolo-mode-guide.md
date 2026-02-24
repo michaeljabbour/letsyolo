@@ -11,7 +11,7 @@
 1. [Claude Code (`claude`)](#1-claude-code-claude-cli)
 2. [OpenAI Codex (`codex`)](#2-openai-codex-cli-codex)
 3. [GitHub Copilot (`copilot`)](#3-github-copilot-cli-copilot)
-4. [Amp / Amplifier (`amp`)](#4-amp--amplifier-amp)
+4. [Amplifier (Microsoft)](#4-amplifier-microsoft)
 5. [Claude Desktop (MCP)](#5-claude-desktop-mcp-tool-auto-approve)
 6. [Quick Reference Table](#6-quick-reference-table)
 
@@ -300,54 +300,57 @@ Requires an active GitHub Copilot subscription. Auth is prompted on first launch
 
 ---
 
-## 4. Amp / Amplifier (`amp`)
+## 4. Amplifier (Microsoft)
 
-### CLI Flags (per-session)
+### Install
+
+**Step 1 — Install `uv`** (required package manager):
 
 ```bash
-# Sourcegraph Amp CLI examples
-amp --dangerously-allow-all -x "your prompt here"
-amp -x "what files are markdown?"
-amp --dangerously-allow-all --stream-json -x "task description"
-amp --mcp-config /path/to/mcp.json -x "use the tools"
+# macOS / Linux / WSL
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Windows PowerShell
+powershell -c "irm https://astral.sh/uv/install.ps1 | iex"
 ```
 
-### Permission System
+**Step 2 — Install Amplifier:**
 
-Amp uses a 4-level permission model per tool:
+```bash
+uv tool install git+https://github.com/microsoft/amplifier
+```
 
-| Level | Behavior |
-|-------|----------|
-| **Allow** | Runs without prompting |
-| **Ask** | Prompts for confirmation |
-| **Reject** | Blocks execution |
-| **Delegate** | Defers decision to external policy program |
+**Step 3 — First-time setup:**
 
-`--dangerously-allow-all` bypasses permission checks.
+```bash
+amplifier init
+```
 
-### Config Files
+### Usage
 
-User config:
+```bash
+# One-shot prompt
+amplifier run "Explain async/await in Python"
 
-- macOS/Linux: `~/.config/amp/settings.json`
-- Windows: `%USERPROFILE%\.config\amp\settings.json`
+# Interactive chat mode
+amplifier
 
-Workspace config:
+# Add optional capability bundles
+amplifier bundle add git+https://github.com/microsoft/amplifier-bundle-recipes@main
+amplifier bundle use recipes
+```
 
-- `.amp/settings.json`
+### YOLO / Auto-Approve
 
-Managed settings (enterprise):
+Microsoft Amplifier does not expose a `--dangerously-allow-all` style flag. There is no documented permission-bypass mode; tool use is handled interactively within the agent chat session.
 
-- macOS: `/Library/Application Support/ampcode/managed-settings.json`
-- Linux: `/etc/ampcode/managed-settings.json`
-- Windows: `C:\ProgramData\ampcode\managed-settings.json`
+### Persistent Config
 
-> Note: there are multiple tools named "amp"/"amplifier" in the ecosystem. Confirm you are using Sourcegraph Amp before applying these flags.
+No persistent global YOLO toggle. Amplifier stores its configuration in `~/.amplifier/` (YAML format), managed via `amplifier init`.
 
 ### Sources
 
-- [Amp Manual](https://ampcode.com/manual)
-- [Amp by Sourcegraph](https://sourcegraph.com/amp)
+- [Microsoft Amplifier on GitHub](https://github.com/microsoft/amplifier)
 
 ---
 
@@ -380,7 +383,7 @@ If you need unattended MCP execution, prefer Claude Code CLI (`claude --dangerou
 | **Claude Code** | `--dangerously-skip-permissions` | `~/.claude/settings.json` | `permissions.defaultMode = "bypassPermissions"` |
 | **Codex** | `--yolo` or `--sandbox danger-full-access --ask-for-approval never` | `~/.codex/config.toml` | `approval_policy = "never"` + `sandbox_mode = "danger-full-access"` |
 | **Copilot** | `--yolo` / `--allow-all` | `~/.copilot/config.json` | No persistent global YOLO toggle |
-| **Amp** | `--dangerously-allow-all` (Sourcegraph Amp) | `~/.config/amp/settings.json` | Permission rules in settings / managed policy |
+| **Amplifier** | N/A (no bypass flag) | `~/.amplifier/` (YAML, via `amplifier init`) | No documented global auto-approve toggle |
 | **Claude Desktop** | N/A | `claude_desktop_config.json` | No documented global auto-approve toggle |
 
 ### Recommended Startup Commands
@@ -389,7 +392,7 @@ If you need unattended MCP execution, prefer Claude Code CLI (`claude --dangerou
 claude --dangerously-skip-permissions
 codex --sandbox danger-full-access --ask-for-approval never
 copilot --yolo
-amp --dangerously-allow-all
+amplifier run "your prompt"   # no bypass flag; runs interactively
 ```
 
 ---

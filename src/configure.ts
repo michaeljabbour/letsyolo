@@ -191,13 +191,13 @@ async function disableCopilot(_configPath: string): Promise<string> {
 }
 
 async function enableAmplifier(_configPath?: string): Promise<string> {
-  // Amplifier uses YAML config (~/.amplifier/settings.yaml) and has no
-  // persistent yolo toggle — use `amplifier --dangerously-allow-all` per-session.
-  return 'No persistent yolo toggle exists for Amplifier. Use `amplifier --dangerously-allow-all` per-session.';
+  // Microsoft Amplifier has no persistent yolo toggle and no bypass flag.
+  // Run `amplifier` to start chat or `amplifier run "<prompt>"` for a single prompt.
+  return 'No persistent yolo toggle exists for Amplifier. Run `amplifier` to start or `amplifier run "<prompt>"` for one-shot use.';
 }
 
 async function disableAmplifier(_configPath?: string): Promise<string> {
-  return 'No persistent yolo toggle to disable. Stop using `amplifier --dangerously-allow-all` flag.';
+  return 'No persistent yolo toggle to disable for Amplifier.';
 }
 
 /**
@@ -368,7 +368,7 @@ export async function checkYoloStatus(): Promise<YoloResult[]> {
           details = 'No persistent yolo toggle (use --yolo flag)';
           break;
         case 'amplifier':
-          details = 'No persistent yolo toggle (use --dangerously-allow-all flag)';
+          details = 'No persistent yolo toggle. Run `amplifier` or `amplifier run "<prompt>"`.';
           break;
       }
     } catch (error) {

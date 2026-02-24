@@ -189,7 +189,7 @@ function getReadyCommands(results: YoloResult[]): string[] {
     'claude-code': 'claude --dangerously-skip-permissions',
     codex: 'codex --yolo',
     copilot: 'copilot --yolo',
-    amplifier: 'amp --dangerously-allow-all',
+    amplifier: 'amplifier',
   };
 
   return results
@@ -303,7 +303,7 @@ ${bold('Agents:')}
   claude, claude-code          Claude Code CLI
   codex                        OpenAI Codex CLI
   copilot, github-copilot      GitHub Copilot CLI
-  amp, amplifier               Sourcegraph Amplifier
+  amplifier                    Amplifier (Microsoft)
 
 ${bold('Global Options:')}
   --json                       Emit machine-readable JSON output
@@ -322,14 +322,14 @@ ${bold('Recommended CLI Flags (per-session)')}
   ${cyan('claude --dangerously-skip-permissions')}
   ${cyan('codex --yolo')}
   ${cyan('copilot --yolo')}
-  ${cyan('amp --dangerously-allow-all')}
+  ${cyan('amplifier')}
 
 ${bold('Full Autonomous Launch Commands')}
 
   ${cyan('claude --dangerously-skip-permissions -p "your prompt"')}
   ${cyan('codex --sandbox danger-full-access --ask-for-approval never')}
   ${cyan('copilot --autopilot --yolo --no-ask-user')}
-  ${cyan('amp --dangerously-allow-all -x "your prompt"')}
+  ${cyan('amplifier run "your prompt"')}
 
 ${yellow('⚠  All bypass modes are for trusted/sandboxed environments only.')}
 `);
@@ -458,7 +458,7 @@ async function main(): Promise<void> {
             claude: 'claude --dangerously-skip-permissions',
             codex: 'codex --yolo',
             copilot: 'copilot --yolo',
-            amplifier: 'amp --dangerously-allow-all',
+            amplifier: 'amplifier',
           },
           warning: 'All bypass modes are for trusted/sandboxed environments only.',
         });
